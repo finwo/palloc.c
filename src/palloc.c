@@ -116,6 +116,7 @@ struct palloc_t * palloc_init(const char *filename, uint32_t flags) {
   char *filepath = _realpath(filename);
   char *z = calloc(48, sizeof(char));
   char *hdr = malloc(8);
+  uint64_t tmp;
 
   if (!filepath) {
     perror("palloc_init::realpath");
@@ -160,6 +161,7 @@ struct palloc_t * palloc_init(const char *filename, uint32_t flags) {
   if (pt->size < 48) {
     if (flags & PALLOC_DYNAMIC) {
       write(pt->descriptor, z, 48);
+      pt->size = 48;
       lseek64(pt->descriptor, 0, SEEK_SET);
     } else {
       fprintf(stderr, "Incompatible medium: %s\n", pt->filename);
@@ -173,6 +175,7 @@ struct palloc_t * palloc_init(const char *filename, uint32_t flags) {
   // Check for pre-existing header & flags
   read(pt->descriptor, hdr, 4);
   if (strncmp(expected_header, hdr, 4)) {
+
     // Initialize medium: header is missing
     lseek64(pt->descriptor, 0, SEEK_SET);
     write(pt->descriptor, expected_header, 4);
@@ -180,17 +183,34 @@ struct palloc_t * palloc_init(const char *filename, uint32_t flags) {
     write(pt->descriptor, &(pt->flags), sizeof(pt->flags));
     pt->flags = be32toh(pt->flags);
     lseek64(pt->descriptor, 0, SEEK_SET);
+
+    // TODO: generalize this
+    // TODO: support extended headers
+    if (pt->flags & PALLOC_EXTENDED) {
+      // Reserved for future use
+    } else {
+      pt->header_size = 4 + sizeof(pt->flags); // PBA\0 + flags
+    }
+
+    // Mark the whole medium as free
+    lseek64(pt->descriptor, 8, SEEK_SET);
+    tmp = htobe64(pt->size - pt->header_size - sizeof(tmp) - sizeof(tmp));
+    write(pt->descriptor, &tmp, sizeof(tmp));
+    lseek64(pt->descriptor, pt->size - sizeof(tmp), SEEK_SET);
+    write(pt->descriptor, &tmp, sizeof(tmp));
   } else {
     // Read flags from file
     read(pt->descriptor, &(pt->flags), sizeof(pt->flags));
     pt->flags = be32toh(pt->flags);
     lseek64(pt->descriptor, 0, SEEK_SET);
-  }
 
-  if (pt->flags & PALLOC_EXTENDED) {
-    // Reserved for future use
-  } else {
-    pt->header_size = 4 + sizeof(pt->flags); // PBA\0 + flags
+    // TODO: generalize this
+    // TODO: support extended headers
+    if (pt->flags & PALLOC_EXTENDED) {
+      // Reserved for future use
+    } else {
+      pt->header_size = 4 + sizeof(pt->flags); // PBA\0 + flags
+    }
   }
 
   free(z);
