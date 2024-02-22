@@ -20,7 +20,7 @@ void test_init() {
   }
 
   // Initialize it
-  struct palloc_t *pt = palloc_init("pizza.db", PALLOC_DEFAULT | PALLOC_DYNAMIC);
+  struct palloc_t *pt = palloc_init(testfile, PALLOC_DEFAULT | PALLOC_DYNAMIC);
 
   ASSERT("pt returned non-null for dynamic new file", pt != NULL);
   ASSERT("size of newly created file is 48", pt->size == 48);
@@ -28,7 +28,7 @@ void test_init() {
 
   palloc_close(pt);
 
-  pt = palloc_init("pizza.db", PALLOC_DEFAULT);
+  pt = palloc_init(testfile, PALLOC_DEFAULT);
 
   ASSERT("pt returned non-null for default re-used file", pt != NULL);
   ASSERT("size of re-used file is still 48", pt->size == 48);

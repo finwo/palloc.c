@@ -227,6 +227,13 @@ void palloc_close(struct palloc_t *pt) {
 }
 
 uint64_t palloc(struct palloc_t *instance, size_t size) {
+
+  // 1. Get first free
+  // 2. Find free having N bytes of data
+  // 3. Split free if remainder is
+
+
+
   return 0;
 }
 
