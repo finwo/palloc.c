@@ -1,0 +1,7 @@
+.DS_STORE
+._.DS_STORE
+/lib/
+/pizza.db
+/palloc-test
+/.cache/
+/compile_commands.json
