@@ -1,3 +1,11 @@
+Freshly initialized dynamic does not need to reserve space, as it'll be dynamically allocated anyway
+
+
+
+
+
+
+
 File structure:
 
 - header
