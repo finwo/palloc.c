@@ -4,7 +4,6 @@ extern "C" {
 
 #define _LARGEFILE64_SOURCE
 
-#include <endian.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -12,6 +11,8 @@ extern "C" {
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
+
+#include "finwo/endian.h"
 
 #include "palloc.h"
 
@@ -23,6 +24,20 @@ extern "C" {
 /*   uint64_t first_free; */
 /*   uint64_t size; */
 /* }; */
+
+#ifdef WIN32
+#define stat_os _stat64
+#define fstat_os fstat64
+#define lseek_os lseek64
+#elif defined(__APPLE__)
+#define stat_os stat
+#define fstat_os fstat
+#define lseek_os lseek
+#else
+#define stat_os stat64
+#define fstat_os fstat64
+#define lseek_os lseek64
+#endif
 
 const char *expected_header = "PBA\0";
 
@@ -133,7 +148,12 @@ struct palloc_t * palloc_init(const char *filename, uint32_t flags) {
   pt->first_free = 0;
   pt->size       = 0;
 
-  int openFlags = O_RDWR | O_CREAT | O_LARGEFILE;
+  int openFlags = O_RDWR | O_CREAT;
+#if defined(__APPLE__)
+  // No O_LARGEFILE needed
+#else
+  openFlags |= O_LARGEFILE;
+#endif
   int openMode  = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP; // 0660
   if (flags & PALLOC_SYNC) {
     openFlags |= O_DSYNC;
@@ -147,8 +167,8 @@ struct palloc_t * palloc_init(const char *filename, uint32_t flags) {
     return NULL;
   }
 
-  struct stat64 fst;
-  if (fstat64(pt->descriptor, &fst)) {
+  struct stat_os fst;
+  if (fstat_os(pt->descriptor, &fst)) {
     perror("palloc_init::fstat");
     palloc_close(pt);
     free(z);
@@ -162,7 +182,7 @@ struct palloc_t * palloc_init(const char *filename, uint32_t flags) {
     if (flags & PALLOC_DYNAMIC) {
       write(pt->descriptor, z, 48);
       pt->size = 48;
-      lseek64(pt->descriptor, 0, SEEK_SET);
+      lseek_os(pt->descriptor, 0, SEEK_SET);
     } else {
       fprintf(stderr, "Incompatible medium: %s\n", pt->filename);
       palloc_close(pt);
@@ -177,12 +197,12 @@ struct palloc_t * palloc_init(const char *filename, uint32_t flags) {
   if (strncmp(expected_header, hdr, 4)) {
 
     // Initialize medium: header is missing
-    lseek64(pt->descriptor, 0, SEEK_SET);
+    lseek_os(pt->descriptor, 0, SEEK_SET);
     write(pt->descriptor, expected_header, 4);
     pt->flags = htobe32(pt->flags);
     write(pt->descriptor, &(pt->flags), sizeof(pt->flags));
     pt->flags = be32toh(pt->flags);
-    lseek64(pt->descriptor, 0, SEEK_SET);
+    lseek_os(pt->descriptor, 0, SEEK_SET);
 
     // TODO: generalize this
     // TODO: support extended headers
@@ -193,16 +213,16 @@ struct palloc_t * palloc_init(const char *filename, uint32_t flags) {
     }
 
     // Mark the whole medium as free
-    lseek64(pt->descriptor, 8, SEEK_SET);
+    lseek_os(pt->descriptor, 8, SEEK_SET);
     tmp = htobe64(pt->size - pt->header_size - sizeof(tmp) - sizeof(tmp));
     write(pt->descriptor, &tmp, sizeof(tmp));
-    lseek64(pt->descriptor, pt->size - sizeof(tmp), SEEK_SET);
+    lseek_os(pt->descriptor, pt->size - sizeof(tmp), SEEK_SET);
     write(pt->descriptor, &tmp, sizeof(tmp));
   } else {
     // Read flags from file
     read(pt->descriptor, &(pt->flags), sizeof(pt->flags));
     pt->flags = be32toh(pt->flags);
-    lseek64(pt->descriptor, 0, SEEK_SET);
+    lseek_os(pt->descriptor, 0, SEEK_SET);
 
     // TODO: generalize this
     // TODO: support extended headers
