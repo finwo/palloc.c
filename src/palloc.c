@@ -38,9 +38,9 @@ extern "C" {
 #define PALLOC_MARKER_FREE (0x8000000000000000)
 
 #if defined(_WIN32) || defined(_WIN64)
-#define stat_os _stat64
-#define fstat_os fstat64
-#define lseek_os lseek64
+#define stat_os __stat64
+#define fstat_os _fstat64
+#define lseek_os _lseeki64
 #elif defined(__APPLE__)
 #define stat_os stat
 #define fstat_os fstat
