@@ -55,9 +55,10 @@ void test_init() {
   uint64_t my_alloc = palloc(pt, 4);
   ASSERT("first allocation is located at 16", my_alloc == 16);
   ASSERT("size after small alloc is 40", pt->size == 40);
-  /* my_alloc = palloc(pt, 32); */
-  /* ASSERT("first allocation is located at 48", my_alloc == 48); */
-  /* ASSERT("size after small alloc is 96", pt->size == 96); */
+
+  my_alloc = palloc(pt, 32);
+  ASSERT("first allocation is located at 48", my_alloc == 48);
+  ASSERT("size after small alloc is 88", pt->size == 88);
   palloc_close(pt);
 
   // Write empty larger file to test with as medium

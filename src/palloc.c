@@ -349,6 +349,13 @@ uint64_t palloc(struct palloc_t *pt, size_t size) {
 
   // Here = we got found_free
 
+  // Move first_free tracker if needed
+  if (found_free == pt->first_free) {
+    lseek_os(pt->descriptor, found_free + (sizeof(marker_be)*2), SEEK_SET); // Move to found block
+    read(pt->descriptor, &marker_be, sizeof(marker_be));
+    pt->first_free = be64toh(marker_be);
+  }
+
   // Get size of found_free
   lseek_os(pt->descriptor, found_free, SEEK_SET); // Move to found block
   read(pt->descriptor, &marker_be, sizeof(marker_be));
