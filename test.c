@@ -105,7 +105,7 @@ void test_init() {
   // Write empty larger file to test with as medium
   int fd = open_os(testfile, O_RDWR);
   lseek_os(fd, 0, SEEK_SET);
-  write(fd, z, 1024*1024);
+  write_os(fd, z, 1024*1024);
   close_os(fd);
 
   // Initialize larger medium
