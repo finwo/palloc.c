@@ -41,7 +41,7 @@ extern "C" {
 #define open_os open
 #define write_os write
 #define read_os read
-#define close_os _close
+#define close_os close
 #define unlink_os unlink
 #define OPENMODE  (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP)
 #else
@@ -51,7 +51,7 @@ extern "C" {
 #define open_os open
 #define write_os write
 #define read_os read
-#define close_os _close
+#define close_os close
 #define unlink_os unlink
 #define OPENMODE  (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP)
 #endif
