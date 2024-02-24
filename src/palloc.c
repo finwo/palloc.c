@@ -11,7 +11,12 @@ extern "C" {
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+
+#ifdef WIN32
+#include <windows.h>
+#else
 #include <unistd.h>
+#endif
 
 #include "finwo/endian.h"
 

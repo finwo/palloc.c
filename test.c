@@ -6,7 +6,12 @@ extern "C" {
 #include <fcntl.h>
 #include <stdint.h>
 #include <stdio.h>
+
+#ifdef WIN32
+#include <windows.h>
+#else
 #include <unistd.h>
+#endif
 
 #include "finwo/assert.h"
 
