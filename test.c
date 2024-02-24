@@ -35,6 +35,9 @@ void test_init() {
   uint64_t alloc_2;
   uint64_t alloc_3;
   uint64_t alloc_4;
+  uint64_t alloc_5;
+  uint64_t alloc_6;
+  uint64_t alloc_7;
 
   // Remove the file for this test
   if (unlink(testfile)) {
@@ -103,6 +106,18 @@ void test_init() {
   pfree(pt, alloc_1);
   pfree(pt, alloc_3);
   pfree(pt, alloc_2);
+
+  // Allocation on static medium works
+  alloc_5 = palloc(pt, 80);
+  ASSERT("6th allocation, after 3 freed at 48", alloc_5 == 48);
+
+  // Static medium has a 32-byte free space, let's assign another 64 bytes and skip that one free
+  alloc_6 = palloc(pt, 64);
+  ASSERT("7th allocation, skipping gap, at 240", alloc_6 == 240);
+
+  // Assigning more than available space should fail
+  alloc_7 = palloc(pt, 1024*1024);
+  ASSERT("8th allocation, being too large, fails", alloc_7 == 0);
 
   palloc_close(pt);
 
