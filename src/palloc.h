@@ -20,10 +20,10 @@ struct palloc_t {
 };
 
 struct palloc_t * palloc_init(const char *filename, uint32_t flags);
-void              palloc_close(struct palloc_t *instance);
+void              palloc_close(struct palloc_t *pt);
 
-uint64_t palloc(struct palloc_t *instance, size_t size);
-void     pfree(struct palloc_t *instance, uint64_t ptr);
+uint64_t palloc(struct palloc_t *pt, size_t size);
+void     pfree(struct palloc_t *pt, uint64_t ptr);
 
 #ifdef __cplusplus
 } // extern "C"

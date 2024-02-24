@@ -257,7 +257,7 @@ void palloc_close(struct palloc_t *pt) {
   free(pt);
 }
 
-uint64_t palloc(struct palloc_t *instance, size_t size) {
+uint64_t palloc(struct palloc_t *pt, size_t size) {
 
   // 1. Get first free
   // 2. Find free having N bytes of data
