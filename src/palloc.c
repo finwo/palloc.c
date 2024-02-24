@@ -12,13 +12,15 @@ extern "C" {
 #include <string.h>
 #include <sys/stat.h>
 
+#include "finwo/endian.h"
+
 #if defined(_WIN32) || defined(_WIN64)
+// Needs to be AFTER winsock2 which is used for endian.h
 #include <windows.h>
 #else
 #include <unistd.h>
 #endif
 
-#include "finwo/endian.h"
 
 #include "palloc.h"
 

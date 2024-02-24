@@ -7,15 +7,16 @@ extern "C" {
 #include <stdint.h>
 #include <stdio.h>
 
+#include "finwo/assert.h"
+
+#include "palloc.h"
+
 #if defined(_WIN32) || defined(_WIN64)
+// Needs to be AFTER winsock2 which is used for endian.h
 #include <windows.h>
 #else
 #include <unistd.h>
 #endif
-
-#include "finwo/assert.h"
-
-#include "palloc.h"
 
 #if defined(_WIN32) || defined(_WIN64)
 #define stat_os _stat64
