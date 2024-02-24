@@ -18,6 +18,7 @@ extern "C" {
 // Needs to be AFTER winsock2 which is used for endian.h
 #include <windows.h>
 #include <io.h>
+#include <BaseTsd.h>
 #else
 #include <unistd.h>
 #endif
@@ -48,6 +49,7 @@ extern "C" {
 #define O_RDWR  _O_RDWR
 #define OPENMODE  (_S_IREAD | _S_IWRITE)
 #define O_DSYNC 0
+#define ssize_t SSIZE_T
 #elif defined(__APPLE__)
 #define stat_os stat
 #define fstat_os fstat
