@@ -28,6 +28,7 @@ extern "C" {
 #define write_os _write
 #define read_os _read
 #define close_os _close
+#define unlink_os _unlink
 #define O_CREAT _O_CREAT
 #define O_RDWR  _O_RDWR
 #define OPENMODE  (_S_IREAD | _S_IWRITE)
@@ -41,6 +42,7 @@ extern "C" {
 #define write_os write
 #define read_os read
 #define close_os _close
+#define unlink_os unlink
 #define OPENMODE  (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP)
 #else
 #define stat_os stat64
@@ -50,6 +52,7 @@ extern "C" {
 #define write_os write
 #define read_os read
 #define close_os _close
+#define unlink_os unlink
 #define OPENMODE  (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP)
 #endif
 
@@ -67,7 +70,7 @@ void test_init() {
   uint64_t alloc_7;
 
   // Remove the file for this test
-  if (unlink(testfile)) {
+  if (unlink_os(testfile)) {
     if (errno != ENOENT) {
       perror("unlink");
     }
