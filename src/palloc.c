@@ -17,6 +17,7 @@ extern "C" {
 #if defined(_WIN32) || defined(_WIN64)
 // Needs to be AFTER winsock2 which is used for endian.h
 #include <windows.h>
+#include <io.h>
 #else
 #include <unistd.h>
 #endif
