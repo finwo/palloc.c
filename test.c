@@ -14,22 +14,40 @@ extern "C" {
 #if defined(_WIN32) || defined(_WIN64)
 // Needs to be AFTER winsock2 which is used for endian.h
 #include <windows.h>
+#include <io.h>
+#include <BaseTsd.h>
 #else
 #include <unistd.h>
 #endif
 
 #if defined(_WIN32) || defined(_WIN64)
-#define stat_os _stat64
-#define fstat_os fstat64
-#define lseek_os lseek64
+#define stat_os __stat64
+#define fstat_os _fstat64
+#define lseek_os _lseeki64
+#define open_os _open
+#define write_os _write
+#define read_os _read
+#define O_CREAT _O_CREAT
+#define O_RDWR  _O_RDWR
+#define OPENMODE  (_S_IREAD | _S_IWRITE)
+#define O_DSYNC 0
+#define ssize_t SSIZE_T
 #elif defined(__APPLE__)
 #define stat_os stat
 #define fstat_os fstat
 #define lseek_os lseek
+#define open_os open
+#define write_os write
+#define read_os read
+#define OPENMODE  (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP)
 #else
 #define stat_os stat64
 #define fstat_os fstat64
 #define lseek_os lseek64
+#define open_os open
+#define write_os write
+#define read_os read
+#define OPENMODE  (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP)
 #endif
 
 void test_init() {
@@ -79,7 +97,7 @@ void test_init() {
   palloc_close(pt);
 
   // Write empty larger file to test with as medium
-  int fd = open(testfile, O_RDWR);
+  int fd = open_os(testfile, O_RDWR);
   lseek_os(fd, 0, SEEK_SET);
   write(fd, z, 1024*1024);
   close(fd);
