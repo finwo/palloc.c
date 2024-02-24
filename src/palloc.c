@@ -12,7 +12,7 @@ extern "C" {
 #include <string.h>
 #include <sys/stat.h>
 
-#ifdef WIN32
+#if defined(_WIN32) || defined(_WIN64)
 #include <windows.h>
 #else
 #include <unistd.h>
@@ -33,7 +33,7 @@ extern "C" {
 
 #define PALLOC_MARKER_FREE (0x8000000000000000)
 
-#ifdef WIN32
+#if defined(_WIN32) || defined(_WIN64)
 #define stat_os _stat64
 #define fstat_os fstat64
 #define lseek_os lseek64

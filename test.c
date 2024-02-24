@@ -7,7 +7,7 @@ extern "C" {
 #include <stdint.h>
 #include <stdio.h>
 
-#ifdef WIN32
+#if defined(_WIN32) || defined(_WIN64)
 #include <windows.h>
 #else
 #include <unistd.h>
@@ -17,7 +17,7 @@ extern "C" {
 
 #include "palloc.h"
 
-#ifdef WIN32
+#if defined(_WIN32) || defined(_WIN64)
 #define stat_os _stat64
 #define fstat_os fstat64
 #define lseek_os lseek64
