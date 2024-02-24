@@ -29,6 +29,7 @@ extern "C" {
 void test_init() {
   char *testfile = "pizza.db";
   char *z = calloc(1024*1024, sizeof(char));
+  uint64_t my_alloc;
 
   // Remove the file for this test
   if (unlink(testfile)) {
@@ -52,7 +53,7 @@ void test_init() {
   ASSERT("header of re-used file is 8", pt->header_size == 8);
 
   // Allocation on dynamic medium grows the file
-  uint64_t my_alloc = palloc(pt, 4);
+  my_alloc = palloc(pt, 4);
   ASSERT("first allocation is located at 16", my_alloc == 16);
   ASSERT("size after small alloc is 40", pt->size == 40);
 
@@ -72,6 +73,15 @@ void test_init() {
   ASSERT("pt returned non-null for dynamic new file", pt != NULL);
   ASSERT("size of newly created file is 1M", pt->size == (1024*1024));
   ASSERT("header of newly created file is 8", pt->header_size == 8);
+
+  // Allocation on static medium works
+  my_alloc = palloc(pt, 4);
+  ASSERT("first allocation is located at 16", my_alloc == 16);
+
+  // Allocation on static medium works
+  my_alloc = palloc(pt, 32);
+  ASSERT("first allocation is located at 48", my_alloc == 48);
+
   palloc_close(pt);
 
 }
