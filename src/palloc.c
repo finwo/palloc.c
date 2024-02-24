@@ -87,7 +87,7 @@ struct palloc_t * palloc_init(const char *filename, uint32_t flags) {
   pt->size       = 0;
 
   int openFlags = O_RDWR | O_CREAT;
-#if defined(__APPLE__)
+#if defined(__APPLE__) || defined(_WIN32) || defined(_WIN64)
   // No O_LARGEFILE needed
 #else
   openFlags |= O_LARGEFILE;
