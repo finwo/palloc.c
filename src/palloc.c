@@ -437,6 +437,13 @@ void pfree(struct palloc_t *instance, uint64_t ptr) {
 
 }
 
+uint64_t palloc_size(struct palloc_t *pt, uint64_t ptr) {
+  uint64_t marker;
+  lseek_os(pt->descriptor, ptr - sizeof(marker), SEEK_SET);
+  if (read(pt->descriptor, &marker, sizeof(marker)) <= 0) return 0;
+  return be64toh(marker) & (~PALLOC_MARKER_FREE);
+}
+
 #ifdef __cplusplus
 } // extern "C"
 #endif

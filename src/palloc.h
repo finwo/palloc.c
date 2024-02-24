@@ -2,6 +2,7 @@
 extern "C" {
 #endif
 
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
 
@@ -24,6 +25,8 @@ void              palloc_close(struct palloc_t *pt);
 
 uint64_t palloc(struct palloc_t *pt, size_t size);
 void     pfree(struct palloc_t *pt, uint64_t ptr);
+
+uint64_t palloc_size(struct palloc_t *pt, uint64_t ptr);
 
 #ifdef __cplusplus
 } // extern "C"
