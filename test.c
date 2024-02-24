@@ -30,6 +30,11 @@ void test_init() {
   char *testfile = "pizza.db";
   char *z = calloc(1024*1024, sizeof(char));
   uint64_t my_alloc;
+  uint64_t alloc_0;
+  uint64_t alloc_1;
+  uint64_t alloc_2;
+  uint64_t alloc_3;
+  uint64_t alloc_4;
 
   // Remove the file for this test
   if (unlink(testfile)) {
@@ -75,12 +80,29 @@ void test_init() {
   ASSERT("header of newly created file is 8", pt->header_size == 8);
 
   // Allocation on static medium works
-  my_alloc = palloc(pt, 4);
-  ASSERT("first allocation is located at 16", my_alloc == 16);
+  alloc_0 = palloc(pt, 4);
+  ASSERT("1st allocation is located at 16", alloc_0 == 16);
 
   // Allocation on static medium works
-  my_alloc = palloc(pt, 32);
-  ASSERT("first allocation is located at 48", my_alloc == 48);
+  alloc_1 = palloc(pt, 32);
+  ASSERT("2nd allocation is located at 48", alloc_1 == 48);
+
+  // Allocation on static medium works
+  alloc_2 = palloc(pt, 32);
+  ASSERT("3rd allocation is located at 96", alloc_2 == 96);
+
+  // Allocation on static medium works
+  alloc_3 = palloc(pt, 32);
+  ASSERT("4th allocation is located at 144", alloc_3 == 144);
+
+  // Allocation on static medium works
+  alloc_4 = palloc(pt, 32);
+  ASSERT("5th allocation is located at 192", alloc_4 == 192);
+
+  // Free up a couple
+  pfree(pt, alloc_1);
+  pfree(pt, alloc_3);
+  pfree(pt, alloc_2);
 
   palloc_close(pt);
 

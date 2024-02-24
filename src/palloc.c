@@ -272,6 +272,7 @@ uint64_t palloc(struct palloc_t *pt, size_t size) {
   uint64_t free_next;
   uint64_t z = 0;
   ssize_t n;
+  size = MAX(16,size);
 
   // Fetch the first free block
   if (!(pt->first_free)) {
@@ -298,7 +299,7 @@ uint64_t palloc(struct palloc_t *pt, size_t size) {
       }
 
       // Here = not free, skip to next
-      lseek_os(pt->descriptor, MAX(sizeof(marker_be)*2, marker_h) + sizeof(marker_be), SEEK_CUR);
+      lseek_os(pt->descriptor, marker_h + sizeof(marker_be), SEEK_CUR);
     }
   }
 
@@ -312,14 +313,12 @@ uint64_t palloc(struct palloc_t *pt, size_t size) {
     pt->first_free = pt->size;
     lseek_os(pt->descriptor, pt->size, SEEK_SET);
     marker_be = htobe64(PALLOC_MARKER_FREE | ((uint64_t)size));
-    write(pt->descriptor, &marker_be, sizeof(marker_be));               // Start marker
-    write(pt->descriptor, &z, sizeof(z));                               // Previous free pointer (zero, 'cuz no first_free)
-    write(pt->descriptor, &z, sizeof(z));                               // Next free pointer
-    if (size > (sizeof(marker_be)*2)) {
-      lseek_os(pt->descriptor, size - (sizeof(marker_be)*2), SEEK_CUR); // Skip remainder of marker
-    }
-    write(pt->descriptor, &marker_be, sizeof(marker_be));               // End marker
-    pt->size = lseek_os(pt->descriptor, 0, SEEK_CUR);                   // Update tracked file size
+    write(pt->descriptor, &marker_be, sizeof(marker_be));             // Start marker
+    write(pt->descriptor, &z, sizeof(z));                             // Previous free pointer (zero, 'cuz no first_free)
+    write(pt->descriptor, &z, sizeof(z));                             // Next free pointer
+    lseek_os(pt->descriptor, size - (sizeof(marker_be)*2), SEEK_CUR); // Skip remainder of marker
+    write(pt->descriptor, &marker_be, sizeof(marker_be));             // End marker
+    pt->size = lseek_os(pt->descriptor, 0, SEEK_CUR);                 // Update tracked file size
   }
 
   // Here = we got first_free
@@ -361,21 +360,21 @@ uint64_t palloc(struct palloc_t *pt, size_t size) {
   // Split blob if it's large enough to contain another
   if ((marker_h - size) > (sizeof(marker_be)*4)) {
     marker_left  = htobe64(((uint64_t)size) | PALLOC_MARKER_FREE);
-    marker_right = htobe64((marker_h - MAX(16,size) - (sizeof(marker_be)*2)) | PALLOC_MARKER_FREE);
+    marker_right = htobe64((marker_h - size - (sizeof(marker_be)*2)) | PALLOC_MARKER_FREE);
 
     // Write left markers
     lseek_os(pt->descriptor, found_free, SEEK_SET); // Move to found block
     write(pt->descriptor, &marker_left, sizeof(marker_be)); // Write start marker
-    lseek_os(pt->descriptor, MAX(16,size), SEEK_CUR);       // Skip data
+    lseek_os(pt->descriptor, size, SEEK_CUR);       // Skip data
     write(pt->descriptor, &marker_left, sizeof(marker_be)); // Write end marker
 
     // Write right markers
     write(pt->descriptor, &marker_right, sizeof(marker_be));                             // Write start marker
-    lseek_os(pt->descriptor, marker_h - MAX(16,size) - (sizeof(marker_be)*2), SEEK_CUR); // Skip data
+    lseek_os(pt->descriptor, marker_h - size - (sizeof(marker_be)*2), SEEK_CUR); // Skip data
     write(pt->descriptor, &marker_right, sizeof(marker_be));                             // Write end marker
 
     // Get a readable address of the right free block
-    marker_right = found_free + (sizeof(marker_be)*2) + MAX(16,size);
+    marker_right = found_free + (sizeof(marker_be)*2) + size;
 
     // Move next free pointer over
     lseek_os(pt->descriptor, found_free + (sizeof(marker_be)*2), SEEK_SET); // Move to next free pointer src
@@ -394,7 +393,7 @@ uint64_t palloc(struct palloc_t *pt, size_t size) {
     write(pt->descriptor, &free_prev, sizeof(free_prev));
 
     // And update the remembered marker of the pointer-to block
-    marker_h = MAX(16,size);
+    marker_h = size;
   }
 
   // Update previous free block's next pointer
@@ -425,16 +424,109 @@ uint64_t palloc(struct palloc_t *pt, size_t size) {
   // Mark found_free as occupied
   lseek_os(pt->descriptor, found_free, SEEK_SET);
   marker_be = htobe64(marker_h);
-  write(pt->descriptor, &marker_be, sizeof(marker_be));                  // Start marker
-  lseek_os(pt->descriptor, MAX(sizeof(marker_be)*2,marker_h), SEEK_CUR); // Skip content
-  write(pt->descriptor, &marker_be, sizeof(marker_be));                  // End marker
+  write(pt->descriptor, &marker_be, sizeof(marker_be)); // Start marker
+  lseek_os(pt->descriptor, marker_h, SEEK_CUR);         // Skip content
+  write(pt->descriptor, &marker_be, sizeof(marker_be)); // End marker
 
   // Return pointer to the content
   return found_free + sizeof(marker_be);
 }
 
-void pfree(struct palloc_t *instance, uint64_t ptr) {
+void pfree(struct palloc_t *pt, uint64_t ptr) {
+  uint64_t marker_left, marker_right, marker, size;
+  uint64_t free_cur, free_prev, free_next;
 
+  // Fix offset
+  ptr -= sizeof(marker);
+
+  // Detect pre-existing free blocks around us
+  free_prev = 0;
+  free_next = 0;
+  free_cur  = pt->first_free;
+  while(free_cur) {
+    if (free_cur < ptr) free_prev = free_cur;
+    if (free_cur > ptr) { free_next = free_cur; break; }
+    lseek_os(pt->descriptor, free_cur + (sizeof(marker)*2), SEEK_SET);
+    read(pt->descriptor, &free_cur, sizeof(free_cur));
+    free_cur = be64toh(free_cur);
+  }
+
+  // We need BE pointers during the next block
+  free_prev = htobe64(free_prev);
+  free_next = htobe64(free_next);
+
+  // Mark ourselves as free & write our pointers
+  lseek_os(pt->descriptor, ptr, SEEK_SET);
+  read(pt->descriptor, &marker, sizeof(marker));
+  size   = be64toh(marker) & (~PALLOC_MARKER_FREE);
+  marker = htobe64(size | PALLOC_MARKER_FREE);
+  lseek_os(pt->descriptor, ptr, SEEK_SET);
+  write(pt->descriptor, &marker, sizeof(marker));
+  write(pt->descriptor, &free_prev, sizeof(free_prev));
+  write(pt->descriptor, &free_next, sizeof(free_next));
+  lseek_os(pt->descriptor, size - (sizeof(marker)*2), SEEK_CUR);
+  write(pt->descriptor, &marker, sizeof(marker));
+
+  // Update first_free if needed
+  if ((!(pt->first_free)) || (pt->first_free > ptr)) {
+    pt->first_free = ptr;
+  }
+
+  // We need H pointers during the next block
+  free_prev = be64toh(free_prev);
+  free_next = be64toh(free_next);
+
+  // Update our neighbours' pointers
+  if (free_prev) {
+    lseek_os(pt->descriptor, free_prev + (sizeof(marker)*2), SEEK_SET);
+    marker_left = htobe64(ptr);
+    write(pt->descriptor, &marker_left, sizeof(marker));
+  }
+  if (free_next) {
+    lseek_os(pt->descriptor, free_next + sizeof(marker), SEEK_SET);
+    marker_right = htobe64(ptr);
+    write(pt->descriptor, &marker_right, sizeof(marker));
+  }
+
+  /*   // Merge left if consecutive */
+  /*   if (free_prev) { */
+  /*     lseek_os(pt->descriptor, be64toh(free_prev), SEEK_SET); // Read size of free_prev */
+  /*     read(pt->descriptor, &marker_left, sizeof(marker)); */
+  /*     marker_left = be64toh(marker_left) & (~PALLOC_MARKER_FREE); */
+  /*     if (be64toh(free_prev) + marker_left + (sizeof(marker)*3) == ptr) { // Only update if it's direct neighbour = us */
+  /*       lseek_os(pt->descriptor, be64toh(free_prev) + (sizeof(marker)*1), SEEK_SET); // Update it's next */
+  /*       read(pt->descriptor, &free_prev, sizeof(free_prev)); */
+  /*       write(pt->descriptor, &free_next, sizeof(free_next)); */
+  /*       size   = marker_left + size + (sizeof(marker)*2);                     // We are now what used to be free_prev */
+  /*       ptr    = lseek_os(pt->descriptor, 0 - (sizeof(marker)*2), SEEK_CUR); */
+  /*       marker = htobe64(size | PALLOC_MARKER_FREE); */
+  /*       lseek_os(pt->descriptor, ptr - sizeof(marker), SEEK_SET);             // Update markers */
+  /*       write(pt->descriptor, &marker, sizeof(marker)); */
+  /*       lseek_os(pt->descriptor, size, SEEK_CUR); */
+  /*       write(pt->descriptor, &marker, sizeof(marker)); */
+  /*     } */
+  /*   } */
+
+  /*   // Merge right if consecutive */
+  /*   if (free_next) { */
+  /*     if ((ptr + size + sizeof(marker)) == be64toh(free_next)) { */
+  /*       lseek_os(pt->descriptor, be64toh(free_next), SEEK_SET);      // Read size of free_next */
+  /*       read(pt->descriptor, &marker_right, sizeof(marker_right)); */
+  /*       marker_right = be64toh(marker_left) & (~PALLOC_MARKER_FREE); */
+  /*       lseek_os(pt->descriptor, sizeof(marker), SEEK_CUR);          // And it's free_next */
+  /*       read(pt->descriptor, &free_next, sizeof(free_next)); */
+  /*       lseek_os(pt->descriptor, ptr + sizeof(marker), SEEK_SET);    // Update our own free_next */
+  /*       write(pt->descriptor, &free_next, sizeof(free_next)); */
+  /*       size   = marker_right + size + (sizeof(marker)*2);           // Update our markers */
+  /*       marker = htobe64(size | PALLOC_MARKER_FREE); */
+  /*       lseek_os(pt->descriptor, ptr - sizeof(marker), SEEK_SET); */
+  /*       write(pt->descriptor, &marker, sizeof(marker)); */
+  /*       lseek_os(pt->descriptor, size, SEEK_CUR); */
+  /*       write(pt->descriptor, &marker, sizeof(marker)); */
+  /*     } */
+  /*   } */
+
+  // TODO: if dynamic and we're last in the file, truncate
 }
 
 uint64_t palloc_size(struct palloc_t *pt, uint64_t ptr) {
