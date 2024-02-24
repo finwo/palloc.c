@@ -178,10 +178,10 @@ struct palloc_t * palloc_init(const char *filename, uint32_t flags) {
   pt->size = fst.st_size;
 
   // Make sure the medium has room for the header
-  if (pt->size < 48) {
+  if (pt->size < 8) {
     if (flags & PALLOC_DYNAMIC) {
-      write(pt->descriptor, z, 48);
-      pt->size = 48;
+      write(pt->descriptor, z, 8);
+      pt->size = 8;
       lseek_os(pt->descriptor, 0, SEEK_SET);
     } else {
       fprintf(stderr, "Incompatible medium: %s\n", pt->filename);
@@ -212,12 +212,23 @@ struct palloc_t * palloc_init(const char *filename, uint32_t flags) {
       pt->header_size = 4 + sizeof(pt->flags); // PBA\0 + flags
     }
 
-    // Mark the whole medium as free
-    lseek_os(pt->descriptor, 8, SEEK_SET);
-    tmp = htobe64(pt->size - pt->header_size - sizeof(tmp) - sizeof(tmp));
-    write(pt->descriptor, &tmp, sizeof(tmp));
-    lseek_os(pt->descriptor, pt->size - sizeof(tmp), SEEK_SET);
-    write(pt->descriptor, &tmp, sizeof(tmp));
+    // Grow medium if incompatible size detected
+    if ((pt->size > 8) && (pt->size < 40)) {
+      lseek_os(pt->descriptor, 8, SEEK_SET);
+      write(pt->descriptor, z, 32);
+      pt->size = 40;
+    }
+
+    // Mark whole medium as free if there's space
+    if ( pt->size >= 40) {
+      // Mark the whole medium as free
+      lseek_os(pt->descriptor, 8, SEEK_SET);
+      tmp = htobe64(pt->size - pt->header_size - sizeof(tmp) - sizeof(tmp));
+      write(pt->descriptor, &tmp, sizeof(tmp));
+      lseek_os(pt->descriptor, pt->size - sizeof(tmp), SEEK_SET);
+      write(pt->descriptor, &tmp, sizeof(tmp));
+    }
+
   } else {
     // Read flags from file
     read(pt->descriptor, &(pt->flags), sizeof(pt->flags));
