@@ -7,6 +7,7 @@ extern "C" {
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -25,6 +26,8 @@ extern "C" {
 /*   uint64_t size; */
 /* }; */
 
+#define PALLOC_MARKER_FREE (0x8000000000000000)
+
 #ifdef WIN32
 #define stat_os _stat64
 #define fstat_os fstat64
@@ -38,6 +41,9 @@ extern "C" {
 #define fstat_os fstat64
 #define lseek_os lseek64
 #endif
+
+#define MIN(a,b) (((a)<(b))?(a):(b))
+#define MAX(a,b) (((a)>(b))?(a):(b))
 
 const char *expected_header = "PBA\0";
 
@@ -223,7 +229,7 @@ struct palloc_t * palloc_init(const char *filename, uint32_t flags) {
     if ( pt->size >= 40) {
       // Mark the whole medium as free
       lseek_os(pt->descriptor, 8, SEEK_SET);
-      tmp = htobe64(pt->size - pt->header_size - sizeof(tmp) - sizeof(tmp));
+      tmp = htobe64(PALLOC_MARKER_FREE | (pt->size - pt->header_size - sizeof(tmp) - sizeof(tmp)));
       write(pt->descriptor, &tmp, sizeof(tmp));
       lseek_os(pt->descriptor, pt->size - sizeof(tmp), SEEK_SET);
       write(pt->descriptor, &tmp, sizeof(tmp));
@@ -258,14 +264,107 @@ void palloc_close(struct palloc_t *pt) {
 }
 
 uint64_t palloc(struct palloc_t *pt, size_t size) {
+  uint64_t marker_h;
+  uint64_t marker_be;
+  uint64_t z = 0;
+  ssize_t n;
 
-  // 1. Get first free
-  // 2. Find free having N bytes of data
-  // 3. Split free if remainder is
+  // Fetch the first free block
+  if (!(pt->first_free)) {
+    lseek_os(pt->descriptor, pt->header_size, SEEK_SET);
 
+    while(1) {
+      n = read(pt->descriptor, &marker_be, sizeof(marker_be));
+      if (n < 0) {
+        perror("palloc::read");
+        return 0;
+      }
+      if (n == 0) {
+        // EOF
+        break;
+      }
 
+      // Convert to our host format
+      marker_h = be64toh(marker_be);
 
-  return 0;
+      // If free, we found one
+      if (marker_h & PALLOC_MARKER_FREE) {
+        pt->first_free = lseek_os(pt->descriptor, 0 - sizeof(marker_be), SEEK_CUR);
+        break;
+      }
+
+      // Here = not free, skip to next
+      lseek_os(pt->descriptor, MAX(sizeof(marker_be)*2, marker_h) + sizeof(marker_be), SEEK_CUR);
+    }
+  }
+
+  // No first_free & non-dynamic = full
+  if ((!pt->first_free) && (!(pt->flags & PALLOC_DYNAMIC))) {
+    return 0;
+  }
+
+  // No first free = allocate more space
+  if (!pt->first_free) {
+    pt->first_free = pt->size;
+    lseek_os(pt->descriptor, pt->size, SEEK_SET);
+    marker_be = htobe64(PALLOC_MARKER_FREE | ((uint64_t)size));
+    write(pt->descriptor, &marker_be, sizeof(marker_be));               // Start marker
+    write(pt->descriptor, &z, sizeof(z));                               // Previous free pointer (zero, 'cuz no first_free)
+    write(pt->descriptor, &z, sizeof(z));                               // Next free pointer
+    if (size > (sizeof(marker_be)*2)) {
+      lseek_os(pt->descriptor, size - (sizeof(marker_be)*2), SEEK_CUR); // Skip remainder of marker
+    }
+    write(pt->descriptor, &marker_be, sizeof(marker_be));               // End marker
+    pt->size = lseek_os(pt->descriptor, 0, SEEK_CUR);                   // Update tracked file size
+  }
+
+  // Here = we got first_free
+
+  // Look for a free blob that is large enough
+  uint64_t found_free = 0;
+  lseek_os(pt->descriptor, pt->first_free, SEEK_SET); // Go to the first free
+  while(1) {
+    n = read(pt->descriptor, &marker_be, sizeof(marker_be));
+    if (n < 0) {
+      perror("palloc::read");
+      return 0;
+    }
+    if (n == 0) {
+      // No free space, regardless of dynamicness
+      return 0;
+    }
+    marker_h = be64toh(marker_be) & (~PALLOC_MARKER_FREE);
+    // Found marker
+    if (marker_h >= size) {
+      found_free = lseek_os(pt->descriptor, 0 - sizeof(marker_be), SEEK_CUR);
+      break;
+    }
+    // Skip to next free blob
+    lseek_os(pt->descriptor, sizeof(marker_be), SEEK_CUR);   // Skip to "next free" pointer
+    n = read(pt->descriptor, &marker_be, sizeof(marker_be)); // Read the pointer
+    marker_h = be64toh(marker_be);
+    if (!marker_h) return 0;                                 // Handle full medium
+    lseek_os(pt->descriptor, marker_h, SEEK_SET);            // Move to next free
+  }
+
+  // Here = we got found_free
+
+  // Get size of found_free
+  lseek_os(pt->descriptor, found_free, SEEK_SET); // Move to found block
+  read(pt->descriptor, &marker_be, sizeof(marker_be));
+  marker_h = be64toh(marker_be) & (~PALLOC_MARKER_FREE);
+
+  // TODO: Split found_free, must leave marker_h as size
+
+  // Mark found_free as occupied
+  lseek_os(pt->descriptor, found_free, SEEK_SET);
+  marker_be = htobe64(marker_h);
+  write(pt->descriptor, &marker_be, sizeof(marker_be));                  // Start marker
+  lseek_os(pt->descriptor, MAX(sizeof(marker_be)*2,marker_h), SEEK_CUR); // Skip content
+  write(pt->descriptor, &marker_be, sizeof(marker_be));                  // End marker
+
+  // Return pointer to the content
+  return found_free + sizeof(marker_be);
 }
 
 void pfree(struct palloc_t *instance, uint64_t ptr) {

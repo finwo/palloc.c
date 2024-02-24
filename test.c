@@ -4,6 +4,7 @@ extern "C" {
 
 #include <errno.h>
 #include <fcntl.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <unistd.h>
 
@@ -49,6 +50,14 @@ void test_init() {
   ASSERT("size of re-used file is still 8", pt->size == 8);
   ASSERT("flags were properly read from file", pt->flags == (PALLOC_DEFAULT | PALLOC_DYNAMIC));
   ASSERT("header of re-used file is 8", pt->header_size == 8);
+
+  // Allocation on dynamic medium grows the file
+  uint64_t my_alloc = palloc(pt, 4);
+  ASSERT("first allocation is located at 16", my_alloc == 16);
+  ASSERT("size after small alloc is 40", pt->size == 40);
+  /* my_alloc = palloc(pt, 32); */
+  /* ASSERT("first allocation is located at 48", my_alloc == 48); */
+  /* ASSERT("size after small alloc is 96", pt->size == 96); */
   palloc_close(pt);
 
   // Write empty larger file to test with as medium
