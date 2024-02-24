@@ -41,14 +41,23 @@ extern "C" {
 #define stat_os __stat64
 #define fstat_os _fstat64
 #define lseek_os _lseeki64
+#define open_os _open
+#define O_CREAT _O_CREAT
+#define O_RDWR  _O_RDWR
+#define OPENMODE  (_S_IREAD | _S_IWRITE)
+#define O_DSYNC 0
 #elif defined(__APPLE__)
 #define stat_os stat
 #define fstat_os fstat
 #define lseek_os lseek
+#define open_os open
+#define OPENMODE  (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP)
 #else
 #define stat_os stat64
 #define fstat_os fstat64
 #define lseek_os lseek64
+#define open_os open
+#define OPENMODE  (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP)
 #endif
 
 #define MIN(a,b) (((a)<(b))?(a):(b))
@@ -83,11 +92,10 @@ struct palloc_t * palloc_init(const char *filename, uint32_t flags) {
 #else
   openFlags |= O_LARGEFILE;
 #endif
-  int openMode  = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP; // 0660
   if (flags & PALLOC_SYNC) {
     openFlags |= O_DSYNC;
   }
-  pt->descriptor = open(pt->filename, openFlags, openMode);
+  pt->descriptor = open_os(pt->filename, openFlags, OPENMODE);
   if (pt->descriptor < 0) {
     perror("palloc_init::open");
     palloc_close(pt);
