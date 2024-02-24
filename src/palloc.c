@@ -545,11 +545,42 @@ void pfree(struct palloc_t *pt, uint64_t ptr) {
   // TODO: if dynamic and we're last in the file, truncate
 }
 
+// Gets the size of the blob
 uint64_t palloc_size(struct palloc_t *pt, uint64_t ptr) {
   uint64_t marker;
   lseek_os(pt->descriptor, ptr - sizeof(marker), SEEK_SET);
   if (read(pt->descriptor, &marker, sizeof(marker)) <= 0) return 0;
   return be64toh(marker) & (~PALLOC_MARKER_FREE);
+}
+
+// Fetches the first allocated
+uint64_t palloc_first(struct palloc_t *pt) {
+  uint64_t marker;
+  uint64_t idx = pt->header_size;
+
+  while(1) {
+    lseek_os(pt->descriptor, idx, SEEK_SET);
+    if (read(pt->descriptor, &marker, sizeof(marker)) <= 0) return 0;
+    marker = be64toh(marker);
+    if (!(marker & PALLOC_MARKER_FREE)) return idx + sizeof(marker);
+    idx += (sizeof(marker)*2) + (marker & (~PALLOC_MARKER_FREE));
+  }
+
+}
+
+// Fetches the next allocated
+uint64_t palloc_next(struct palloc_t *pt, uint64_t ptr) {
+  uint64_t marker;
+  lseek_os(pt->descriptor, ptr - sizeof(marker), SEEK_SET);
+  if (read(pt->descriptor, &marker, sizeof(marker)) <= 0) return 0;
+  uint64_t idx = ptr + sizeof(marker) + (be64toh(marker) & (~PALLOC_MARKER_FREE));
+  while(1) {
+    lseek_os(pt->descriptor, idx, SEEK_SET);
+    if (read(pt->descriptor, &marker, sizeof(marker)) <= 0) return 0;
+    marker = be64toh(marker);
+    if (!(marker & PALLOC_MARKER_FREE)) return idx + sizeof(marker);
+    idx += (sizeof(marker)*2) + (marker & (~PALLOC_MARKER_FREE));
+  }
 }
 
 #ifdef __cplusplus

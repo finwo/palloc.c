@@ -64,10 +64,12 @@ void test_init() {
   my_alloc = palloc(pt, 4);
   ASSERT("first allocation is located at 16", my_alloc == 16);
   ASSERT("size after small alloc is 40", pt->size == 40);
+  ASSERT("size of the alloc is indicated as 16", palloc_size(pt, my_alloc) == 16);
 
   my_alloc = palloc(pt, 32);
   ASSERT("first allocation is located at 48", my_alloc == 48);
   ASSERT("size after small alloc is 88", pt->size == 88);
+  ASSERT("size of the alloc is indicated as 32", palloc_size(pt, my_alloc) == 32);
   palloc_close(pt);
 
   // Write empty larger file to test with as medium
@@ -103,21 +105,31 @@ void test_init() {
   ASSERT("5th allocation is located at 192", alloc_4 == 192);
 
   // Free up a couple
-  pfree(pt, alloc_1);
   pfree(pt, alloc_3);
+  pfree(pt, alloc_0);
   pfree(pt, alloc_2);
 
   // Allocation on static medium works
-  alloc_5 = palloc(pt, 80);
-  ASSERT("6th allocation, after 3 freed at 48", alloc_5 == 48);
+  alloc_5 = palloc(pt, 40);
+  ASSERT("6th allocation, after 3 freed at org alloc", alloc_5 == alloc_2);
 
-  // Static medium has a 32-byte free space, let's assign another 64 bytes and skip that one free
+  // Static medium has a free space, let's assign another 64 bytes and skip that one free
   alloc_6 = palloc(pt, 64);
   ASSERT("7th allocation, skipping gap, at 240", alloc_6 == 240);
 
   // Assigning more than available space should fail
   alloc_7 = palloc(pt, 1024*1024);
   ASSERT("8th allocation, being too large, fails", alloc_7 == 0);
+
+  // Iteration
+  ASSERT("1st is indicated as first allocated", palloc_first(pt) == alloc_1);
+  ASSERT("2nd is indicated as filled gap", palloc_next(pt, alloc_1) == alloc_5);
+  ASSERT("3nd is indicated as original 5th", palloc_next(pt, alloc_5) == alloc_4);
+  ASSERT("4th is indicated as original 7th", palloc_next(pt, alloc_4) == alloc_6);
+  ASSERT("5th is indicated as not existing", palloc_next(pt, alloc_6) == 0);
+
+  my_alloc = palloc(pt, 1);
+  ASSERT("1st is indicated as filled gap after new alloc", palloc_first(pt) == my_alloc);
 
   palloc_close(pt);
 
