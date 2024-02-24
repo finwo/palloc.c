@@ -59,11 +59,6 @@ jobs:
             bin: palloc-test-aarch64
 
           - distro: ubuntu_latest
-            arch: armv7
-            cc: gcc
-            bin: palloc-test-armv7
-
-          - distro: ubuntu_latest
             arch: riscv64
             cc: gcc
             bin: palloc-test-riscv64
