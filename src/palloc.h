@@ -8,31 +8,6 @@
 /// of data within a file or other file-like medium.
 ///
 
-/* File structure: */
-
-/* - header */
-/*     - 4B header "PBA\0" */
-/*     - uint16_t  flags */
-/* - blobs */
-/*     - 8B free + size */
-
-/* - size indicator: data only, excludes size indicator itself */
-
-/* - free flag: */
-/*     - 1 = free */
-/*     - 0 = occupied */
-
-/* - blob structure: */
-/*     - free: */
-/*         - 8B size | flag */
-/*         - 8B pointer previous free block (0 = no previous free block) */
-/*         - 8B pointer next free block (0 = no next free block) */
-/*         - 8B size | flag */
-/*     - occupied: */
-/*         - 8B size */
-/*         - &lt;data[n]&gt; */
-/*         - 8B size */
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -157,18 +132,36 @@ void pfree(struct palloc_t *pt, uint64_t ptr);
 ///>
 /// </details>
 
-  /* Returns the real size of the data section of the allocated blob pointed to by */
-  /* ptr, not the originally requested size. */
+/// <details>
+///   <summary>palloc_size(pt, ptr)</summary>
+///
+///   Returns the real size of the data section of the allocated blob pointed
+///   to by ptr, not the originally requested size.
+///<C
 uint64_t palloc_size(struct palloc_t *pt, uint64_t ptr);
+///>
+/// </details>
 
-  /* Returns an offset to the data section of the first allocated blob within the */
-  /* descriptor, or 0 if no allocated blob exists. */
+/// <details>
+///   <summary>palloc_first(pt)</summary>
+///
+///   Returns an offset to the data section of the first allocated blob within
+///   the descriptor, or 0 if no allocated blob exists.
+///<C
 uint64_t palloc_first(struct palloc_t *pt);
+///>
+/// </details>
 
-  /* Returns an offset to the data section of the next allocated blob within the */
-  /* descriptor based on the offset to a data section indicated by ptr, or 0 if no */
-  /* next allocated blob exists. */
+/// <details>
+///   <summary>palloc_next(pt, ptr)</summary>
+///
+///   Returns an offset to the data section of the next allocated blob within
+///   the descriptor based on the offset to a data section indicated by ptr, or
+///   0 if no next allocated blob exists.
+///<C
 uint64_t palloc_next(struct palloc_t *pt, uint64_t ptr);
+///>
+/// </details>
 
 #ifdef __cplusplus
 } // extern "C"

@@ -126,3 +126,37 @@ void pfree(struct palloc_t *pt, uint64_t ptr);
 ```
 
 </details>
+<details>
+  <summary>palloc_size(pt, ptr)</summary>
+
+  Returns the real size of the data section of the allocated blob pointed
+  to by ptr, not the originally requested size.
+
+```C
+uint64_t palloc_size(struct palloc_t *pt, uint64_t ptr);
+```
+
+</details>
+<details>
+  <summary>palloc_first(pt)</summary>
+
+  Returns an offset to the data section of the first allocated blob within
+  the descriptor, or 0 if no allocated blob exists.
+
+```C
+uint64_t palloc_first(struct palloc_t *pt);
+```
+
+</details>
+<details>
+  <summary>palloc_next(pt, ptr)</summary>
+
+  Returns an offset to the data section of the next allocated blob within
+  the descriptor based on the offset to a data section indicated by ptr, or
+  0 if no next allocated blob exists.
+
+```C
+uint64_t palloc_next(struct palloc_t *pt, uint64_t ptr);
+```
+
+</details>
