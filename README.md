@@ -75,7 +75,7 @@ struct palloc_t {
 
 </details>
 
-# Methods
+### Methods
 
 <details>
   <summary>palloc_init(filename, flags)</summary>

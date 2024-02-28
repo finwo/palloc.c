@@ -108,7 +108,7 @@ struct palloc_t {
 /// </details>
 
 ///
-/// # Methods
+/// ### Methods
 ///
 
 /// <details>
