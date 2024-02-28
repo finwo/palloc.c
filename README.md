@@ -16,6 +16,7 @@ API
   <summary>PALLOC_DEFAULT</summary>
   Default flags to initialize palloc with, in case some compatibility flags
   are required after a future update.
+
 ```C
 #define PALLOC_DEFAULT 0
 ```
@@ -25,6 +26,7 @@ API
   <summary>PALLOC_DYNAMIC</summary>
   Indicates a storage medium to be initialized as being dynamic. This flag
   is overridden by the medium if the medium has already been initialized.
+
 ```C
 #define PALLOC_DYNAMIC 1
 ```
