@@ -97,7 +97,7 @@ jobs:
 
           install: |
             apt-get update -yq
-            apt-get install -yq build-essential
+            apt-get install -yq build-essential wget
             wget https://github.com/finwo/stddoc.c/releases/download/edge/stddoc-lin-${{ matrix.arch }} -o /usr/local/bin/stddoc
             chmod +x /usr/local/bin/stddoc
 
