@@ -24,6 +24,9 @@ jobs:
         run: |
           echo "/c/msys64/mingw64/bin" >> $GITHUB_PATH
 
+      - uses: finwo/stddoc.c@edge
+        name: Install stddoc
+
       - uses: finwo/dep@main
         name: Install dep
 
@@ -75,6 +78,10 @@ jobs:
       - uses: finwo/dep@main
         name: Install dep
 
+      - if: ${{ matrix.arch == 'none' }}
+        uses: finwo/stddoc.c@edge
+        name: Install stddoc
+
       - name: Install dependencies
         run: dep install
         shell: bash
@@ -91,6 +98,8 @@ jobs:
           install: |
             apt-get update -yq
             apt-get install -yq build-essential
+            wget https://github.com/finwo/stddoc.c/releases/download/edge/stddoc-lin-${{ matrix.arch }} -o /usr/local/bin/stddoc
+            chmod +x /usr/local/bin/stddoc
 
           run: |
             make CC=${{ matrix.cc }} BIN=${{ matrix.bin }}
