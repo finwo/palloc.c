@@ -18,7 +18,7 @@ jobs:
             cc: clang
             bin: palloc-test.exe
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - shell: bash
         run: |
@@ -73,7 +73,7 @@ jobs:
 
     steps:
 
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - uses: finwo/dep@main
         name: Install dep
