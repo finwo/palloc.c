@@ -160,6 +160,7 @@ uint64_t palloc_next(struct palloc_t *pt, uint64_t ptr);
 ```
 
 </details>
+
 File structure
 --------------
 
