@@ -1,4 +1,3 @@
-//////
 /// palloc.c
 /// ========
 ///
@@ -21,7 +20,7 @@ extern "C" {
 #include <stdlib.h>
 
 ///
-/// ### Definitions
+/// ### Definitions - Flags
 ///
 
 /// <details>
@@ -66,89 +65,138 @@ extern "C" {
 /// </details>
 
 ///
-/// ### Structs
+/// ### Definitions - Types
 ///
 
 /// <details>
-///   <summary>palloc_t</summary>
+///   <summary>PALLOC_FD</summary>
 ///
-///   The main palloc descriptor, pass this along to all calls to the library
-///   so the library knows the medium's structure and other required
-///   information.
+///   A reference to how the file descriptors for palloc look like
 ///<C
-struct palloc_t {
-  char     *filename;
-  int      descriptor;
-  uint32_t flags;
-  uint32_t header_size;
-  uint64_t first_free;
-  uint64_t size;
-};
+#define PALLOC_FD int
 ///>
 /// </details>
+
+/// <details>
+///   <summary>PALLOC_FLAGS</summary>
+///
+///   A reference to how the file descriptors for palloc look like
+///<C
+#define PALLOC_FLAGS uint32_t
+///>
+/// </details>
+
+/// <details>
+///   <summary>PALLOC_RESPONSE</summary>
+///
+///   Common return-type, indicating errors and such
+///<C
+#define PALLOC_RESPONSE int
+///>
+/// </details>
+
+/// <details>
+///   <summary>PALLOC_OFFSET</summary>
+///
+///   Indicates an offset within the file descriptor
+#ifndef PALLOC_OFFSET
+///<C
+#define PALLOC_OFFSET uint64_t
+///>
+#endif
+/// </details>
+
+/// <details>
+///   <summary>PALLOC_SIZE</summary>
+///
+///   Indicates an size within the file descriptor
+#ifndef PALLOC_SIZE
+///<C
+#define PALLOC_SIZE uint64_t
+///>
+#endif
+/// </details>
+
+///
+/// ### Definitions - Responses
+///
+
+/// <details>
+///   <summary>PALLOC_OK</summary>
+///
+///   Indicates no error was encountered
+///<C
+#define PALLOC_OK (0)
+///>
+
+/// <details>
+///   <summary>PALLOC_ERR</summary>
+///
+///   Indicates a generic error without specification
+///<C
+#define PALLOC_ERR (-1)
+///>
 
 ///
 /// ### Methods
 ///
 
 /// <details>
-///   <summary>palloc_init(filename, flags)</summary>
+///   <summary>palloc_open(filename, flags)</summary>
 ///
-///   Opens a palloc medium and initializes it if not done so already.
+///   Opens a palloc medium and returns it as a file descriptor both palloc and
+///   the user can use.
 ///<C
-struct palloc_t * palloc_init(const char *filename, uint32_t flags);
+PALLOC_FD palloc_open(const char *filename, PALLOC_FLAGS flags);
+///>
+
+/// <details>
+///   <summary>palloc_init(fd, flags)</summary>
+///
+///   Initializes a pre-opened medium for use with palloc if not already
+///   initialized
+///<C
+PALLOC_RESPONSE palloc_init(PALLOC_FD fd, PALLOC_FLAGS flags);
 ///>
 /// </details>
 
 /// <details>
-///   <summary>palloc_close(pt)</summary>
+///   <summary>palloc_close(fd)</summary>
 ///
-///   Closes the descriptor and frees the palloc_t.
+///   Closes a pre-opened file descriptor
 ///<C
-void palloc_close(struct palloc_t *pt);
+PALLOC_RESPONSE palloc_close(PALLOC_FD fd);
 ///>
-/// </details>
 
 /// <details>
-///   <summary>palloc(pt,size)</summary>
+///   <summary>palloc(fd,size)</summary>
 ///
 ///   Allocates a new blob of the given size in the storage medium and returns
 ///   an offset to the start of the data section you can use for your storage
 ///   purposes.
 ///<C
-uint64_t palloc(struct palloc_t *pt, size_t size);
+PALLOC_OFFSET palloc(PALLOC_FD fd, PALLOC_SIZE size);
 ///>
 /// </details>
 
-
 /// <details>
-///   <summary>pfree(pt, ptr)</summary>
+///   <summary>pfree(fd,ptr)</summary>
 ///
 ///   Marks the blob pointed to by ptr as being unused, allowing it to be
 ///   re-used for future allocations and preventing it from being returned
 ///   during iteration.
 ///<C
-void pfree(struct palloc_t *pt, uint64_t ptr);
+PALLOC_RESPONSE pfree(PALLOC_FD fd, PALLOC_OFFSET ptr);
 ///>
 /// </details>
 
 /// <details>
-///   <summary>palloc_size(pt, ptr)</summary>
+///   <summary>palloc_size(fd,ptr)</summary>
 ///
 ///   Returns the real size of the data section of the allocated blob pointed
 ///   to by ptr, not the originally requested size.
 ///<C
-uint64_t palloc_size(struct palloc_t *pt, uint64_t ptr);
-///>
-/// </details>
-
-/// <details>
-///   <summary>palloc_first(pt)</summary>
-///
-///   Returns an offset to the data section of the first allocated blob within
-///   the descriptor, or 0 if no allocated blob exists.
-///<C
-uint64_t palloc_first(struct palloc_t *pt);
+PALLOC_SIZE palloc_size(PALLOC_FD fd, PALLOC_OFFSET ptr);
 ///>
 /// </details>
 
@@ -159,7 +207,7 @@ uint64_t palloc_first(struct palloc_t *pt);
 ///   the descriptor based on the offset to a data section indicated by ptr, or
 ///   0 if no next allocated blob exists.
 ///<C
-uint64_t palloc_next(struct palloc_t *pt, uint64_t ptr);
+PALLOC_OFFSET palloc_next(PALLOC_FD fd, PALLOC_OFFSET ptr);
 ///>
 /// </details>
 
