@@ -1,3 +1,5 @@
+// vim:fdm=marker:fdl=0
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -39,6 +41,7 @@ extern "C" {
 
 #define PALLOC_MARKER_FREE (0x8000000000000000)
 
+// OS-specific IO macros {{{
 #if defined(_WIN32) || defined(_WIN64)
 #define stat_os __stat64
 #define fstat_os _fstat64
@@ -71,52 +74,78 @@ extern "C" {
 #define close_os close
 #define OPENMODE  (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP)
 #endif
+// }}}
 
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))
 
-// Overloaded ntoh & hton
-int64_t ntoh_i64(int64_t v) {
-  return be64toh(v);
-}
-int64_t hton_i64(int64_t v) {
-  return htobe64(v);
-}
-uint64_t ntoh_u64(uint64_t v) {
-  return be64toh(v);
-}
-uint64_t hton_u64(uint64_t v) {
-  return htobe64(v);
-}
-int32_t ntoh_i32(int32_t v) {
-  return be32toh(v);
-}
-int32_t hton_i32(int32_t v) {
-  return htobe32(v);
-}
-uint32_t ntoh_u32(uint32_t v) {
-  return be32toh(v);
-}
-uint32_t hton_u32(uint32_t v) {
-  return htobe32(v);
-}
-int16_t ntoh_i16(int16_t v) {
-  return be16toh(v);
-}
-int16_t hton_i16(int16_t v) {
-  return htobe16(v);
-}
-uint16_t ntoh_u16(uint16_t v) {
-  return be16toh(v);
-}
-uint16_t hton_u16(uint16_t v) {
-  return htobe16(v);
-}
-#define hton(v) _Generic(v, uint16_t: hton_u16, int16_t: hton_i16, uint32_t: hton_u32, int32_t: hton_i32, int64_t: hton_i64, uint64_t: hton_u64)(v)
-#define ntoh(v) _Generic(v, uint16_t: ntoh_u16, int16_t: ntoh_i16, uint32_t: ntoh_u32, int32_t: ntoh_i32, int64_t: ntoh_i64, uint64_t: ntoh_u64)(v)
-
 const char *expected_header      = "PBA\0";
 #define     expected_header_size   4
+
+struct palloc_fd_info {
+  void *next;
+  PALLOC_FD     fd;
+  PALLOC_OFFSET first_free;
+  PALLOC_SIZE   header_size;
+  PALLOC_SIZE   medium_size;
+};
+
+struct palloc_fd_info *_fd_info = NULL;
+
+struct palloc_fd_info * _palloc_info(PALLOC_FD fd) {
+  PALLOC_OFFSET pos;
+  PALLOC_SIZE   marker;
+
+  // Attempt to fetch cached version
+  struct palloc_fd_info *finfo = _fd_info;
+  while(finfo && (finfo->fd != fd)) finfo = finfo->next;
+
+  // Build new if no cached version was found
+  if (!finfo) {
+    finfo = malloc(sizeof(struct palloc_fd_info));
+    finfo->next = _fd_info;
+    finfo->fd   = fd;
+
+    // Get the current medium size
+    finfo->medium_size = seek_os(fd, 0, SEEK_END);
+
+    // Detect header size
+    finfo->header_size = expected_header_size + sizeof(PALLOC_FLAGS);
+    char *hdr       = malloc(expected_header_size);
+    PALLOC_FLAGS flags;
+    seek_os(fd, 0, SEEK_SET);
+    read_os(fd, hdr   , expected_header_size);
+    read_os(fd, &flags, sizeof(PALLOC_FLAGS));
+    flags = be32toh(flags);
+    if (flags & PALLOC_EXTENDED) {
+      // Reserved for future use
+      // header_size = bigger
+    }
+    free(hdr);
+
+    // Detect first_free block
+    pos = seek_os(fd, finfo->header_size, SEEK_SET);
+    while(pos < finfo->medium_size) {
+      if (read_os(fd, &marker, sizeof(marker)) != sizeof(marker)) {
+        perror("palloc_info::read");
+        exit(1);
+      }
+      marker = be64toh(marker);
+      if (marker & PALLOC_MARKER_FREE) {
+        break;
+      }
+      pos = seek_os(fd, marker + sizeof(marker), SEEK_CUR);
+    }
+    if (pos == finfo->medium_size) {
+      finfo->first_free = 0;
+    } else {
+      finfo->first_free = pos;
+    }
+  }
+
+  return finfo;
+}
+// }}}
 
 PALLOC_FD palloc_open(const char *filename, PALLOC_FLAGS flags) {
 
@@ -219,7 +248,7 @@ PALLOC_RESPONSE palloc_init(PALLOC_FD fd, PALLOC_FLAGS flags) {
   }
 
   // Build & write new header
-  PALLOC_FLAGS nflags = hton(flags & (~PALLOC_SYNC));
+  PALLOC_FLAGS nflags = htobe32(flags & (~PALLOC_SYNC));
   memcpy(hdr, expected_header, expected_header_size);
   memcpy(hdr + expected_header_size, &nflags, sizeof(PALLOC_FLAGS));
   seek_os(fd, 0, SEEK_SET);
@@ -232,8 +261,8 @@ PALLOC_RESPONSE palloc_init(PALLOC_FD fd, PALLOC_FLAGS flags) {
 
   // Mark remainder of medium free
   if (size >= min_medium_size) {
-    PALLOC_SIZE   marker = htons((PALLOC_SIZE)((size - min_header_size - (sizeof(PALLOC_SIZE)*2)) | PALLOC_MARKER_FREE));
-    PALLOC_OFFSET ptr    = htons((PALLOC_OFFSET)0);
+    PALLOC_SIZE   marker = htobe64((PALLOC_SIZE)((size - min_header_size - (sizeof(PALLOC_SIZE)*2)) | PALLOC_MARKER_FREE));
+    PALLOC_OFFSET ptr    = htobe64((PALLOC_OFFSET)0);
     seek_os(fd, min_header_size, SEEK_SET);
     if (write_os(fd, &marker, sizeof(PALLOC_SIZE)) != sizeof(PALLOC_SIZE)) {
       perror("palloc_init::write_marker_start");
@@ -268,18 +297,6 @@ PALLOC_RESPONSE palloc_init(PALLOC_FD fd, PALLOC_FLAGS flags) {
 }
 
 PALLOC_OFFSET palloc(PALLOC_FD fd, PALLOC_SIZE size) {
-  return 0;
-}
-
-PALLOC_RESPONSE pfree(PALLOC_FD fd, PALLOC_OFFSET ptr) {
-  return PALLOC_OK;
-}
-
-PALLOC_SIZE palloc_size(PALLOC_FD fd, PALLOC_OFFSET ptr) {
-  return 0;
-}
-
-PALLOC_OFFSET palloc_next(PALLOC_FD fd, PALLOC_OFFSET ptr) {
   return 0;
 }
 
@@ -451,6 +468,19 @@ PALLOC_OFFSET palloc_next(PALLOC_FD fd, PALLOC_OFFSET ptr) {
 /*   // Return pointer to the content */
 /*   return found_free + sizeof(marker_be); */
 /* } */
+
+PALLOC_RESPONSE pfree(PALLOC_FD fd, PALLOC_OFFSET ptr) {
+  return PALLOC_OK;
+}
+
+PALLOC_SIZE palloc_size(PALLOC_FD fd, PALLOC_OFFSET ptr) {
+  return 0;
+}
+
+PALLOC_OFFSET palloc_next(PALLOC_FD fd, PALLOC_OFFSET ptr) {
+  return 0;
+}
+
 
 /* void _pfree_merge(struct palloc_t *pt, uint64_t left, uint64_t right) { */
 /*   uint64_t left_marker , left_prev , left_next , left_size ; */

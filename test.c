@@ -102,6 +102,10 @@ void test_init() {
   ASSERT("size after small alloc is 40", size == 40);
   ASSERT("size of the alloc is indicated as 16", palloc_size(fd, my_alloc) == 16);
 
+
+
+
+
   palloc_close(fd);
   free(z);
   return;
