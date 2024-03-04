@@ -180,6 +180,22 @@ PALLOC_FD palloc_open(const char *filename, PALLOC_FLAGS flags) {
 }
 
 PALLOC_RESPONSE palloc_close(PALLOC_FD fd) {
+
+  // Free fd info if we have it
+  struct palloc_fd_info *finfo_cur = _fd_info;
+  struct palloc_fd_info *finfo_prv = NULL;
+  while(finfo_cur && (finfo_cur->fd != fd)) {
+    finfo_prv = finfo_cur;
+    finfo_cur = finfo_cur->next;
+  }
+  if (finfo_cur) {
+    // Point prev to our next
+    if (finfo_prv) finfo_prv->next = finfo_cur->next;
+    else _fd_info = finfo_cur->next;
+    // Free the info
+    free(finfo_cur);
+  }
+
   const int r = close_os(fd);
   if (r) {
     perror("close");
