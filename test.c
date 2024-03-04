@@ -23,7 +23,7 @@ extern "C" {
 #if defined(_WIN32) || defined(_WIN64)
 #define stat_os __stat64
 #define fstat_os _fstat64
-#define lseek_os _lseeki64
+#define seek_os _lseeki64
 #define open_os _open
 #define write_os _write
 #define read_os _read
@@ -37,7 +37,7 @@ extern "C" {
 #elif defined(__APPLE__)
 #define stat_os stat
 #define fstat_os fstat
-#define lseek_os lseek
+#define seek_os lseek
 #define open_os open
 #define write_os write
 #define read_os read
@@ -47,7 +47,7 @@ extern "C" {
 #else
 #define stat_os stat64
 #define fstat_os fstat64
-#define lseek_os lseek64
+#define seek_os lseek64
 #define open_os open
 #define write_os write
 #define read_os read
@@ -58,16 +58,54 @@ extern "C" {
 
 void test_init() {
   char *testfile = "pizza.db";
+  char *z = calloc(1024*1024, sizeof(char));
 
+  // Remove the file for this test
+  if (unlink_os(testfile)) {
+    if (errno != ENOENT) {
+      perror("unlink");
+    }
+  }
+
+  // Pre-open the file descriptor palloc will be operating on
   int fd = palloc_open(testfile, PALLOC_DEFAULT | PALLOC_DYNAMIC);
 
+  // Test a freshly opened file
+  int size = seek_os(fd, 0, SEEK_END);
+  ASSERT("Freshly opening a new file returns a valid file descriptor", fd != 0);
+  ASSERT("Freshly created db is still 0 in size", size == 0);
+  palloc_close(fd);
 
-  printf("fd: %d\n", fd);
+  // Test re-opening a 0-length file
+  fd = palloc_open(testfile, PALLOC_DEFAULT | PALLOC_DYNAMIC);
+  size = seek_os(fd, 0, SEEK_END);
+  ASSERT("Re-opening 0-length returned a valid file descriptor", fd != 0);
+  ASSERT("Re-opened 0-length file is still 0", size == 0);
+
+  // Initialize the new file
+  PALLOC_RESPONSE ret = palloc_init(fd, PALLOC_DEFAULT | PALLOC_DYNAMIC);
+  ASSERT("Initializing a blank file returns successful", ret == PALLOC_OK);
+  size = seek_os(fd, 0, SEEK_END);
+  ASSERT("Initializing a blank file makes it 8 bytes", size == 8);
+  palloc_close(fd);
+
+  // Re-opening empty storage
+  fd = palloc_open(testfile, PALLOC_DEFAULT | PALLOC_DYNAMIC);
+  ASSERT("Re-opening pre-initialized returns a valid file descriptor", fd != 0);
+  size = seek_os(fd, 0, SEEK_END);
+  ASSERT("File is still 8 bytes after opening", size == 8);
+
+  // Allocation on dynamic medium grows the file
+  PALLOC_OFFSET my_alloc = palloc(fd, 4);
+  size = seek_os(fd, 0, SEEK_END);
+  ASSERT("first allocation is located at 16", my_alloc == 16);
+  ASSERT("size after small alloc is 40", size == 40);
+  ASSERT("size of the alloc is indicated as 16", palloc_size(fd, my_alloc) == 16);
 
   palloc_close(fd);
+  free(z);
   return;
 
-  /* char *z = calloc(1024*1024, sizeof(char)); */
   /* uint64_t my_alloc; */
   /* uint64_t alloc_0; */
   /* uint64_t alloc_1; */
@@ -78,26 +116,7 @@ void test_init() {
   /* uint64_t alloc_6; */
   /* uint64_t alloc_7; */
 
-  /* // Remove the file for this test */
-  /* if (unlink_os(testfile)) { */
-  /*   if (errno != ENOENT) { */
-  /*     perror("unlink"); */
-  /*   } */
-  /* } */
 
-  /* // Initialize new file */
-  /* struct palloc_t *pt = palloc_init(testfile, PALLOC_DEFAULT | PALLOC_DYNAMIC); */
-  /* ASSERT("pt returned non-null for dynamic new file", pt != NULL); */
-  /* ASSERT("size of newly created file is 8", pt->size == 8); */
-  /* ASSERT("header of newly created file is 8", pt->header_size == 8); */
-  /* palloc_close(pt); */
-
-  /* // Re-opening empty storage */
-  /* pt = palloc_init(testfile, PALLOC_DEFAULT); */
-  /* ASSERT("pt returned non-null for default re-used file", pt != NULL); */
-  /* ASSERT("size of re-used file is still 8", pt->size == 8); */
-  /* ASSERT("flags were properly read from file", pt->flags == (PALLOC_DEFAULT | PALLOC_DYNAMIC)); */
-  /* ASSERT("header of re-used file is 8", pt->header_size == 8); */
 
   /* // Allocation on dynamic medium grows the file */
   /* my_alloc = palloc(pt, 4); */
@@ -172,6 +191,7 @@ void test_init() {
 
   /* palloc_close(pt); */
 
+  free(z);
 }
 
 int main() {

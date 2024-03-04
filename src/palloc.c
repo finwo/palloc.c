@@ -174,10 +174,24 @@ PALLOC_RESPONSE palloc_init(PALLOC_FD fd, PALLOC_FLAGS flags) {
   int size = fst.st_size;
 
   // Make sure the medium has room for the header
-  if (size < min_medium_size) {
+  if (size < min_header_size) {
     if (flags & PALLOC_DYNAMIC) {
       seek_os(fd, 0, SEEK_SET);
-      write_os(fd, z, min_medium_size);
+      write_os(fd, z, min_header_size);
+      size = min_header_size;
+      seek_os(fd, 0, SEEK_SET);
+    } else {
+      fprintf(stderr, "Incompatible medium\n");
+      free(z);
+      return PALLOC_ERR;
+    }
+  }
+
+  // Fix broken size
+  if ((size > min_header_size) && (size < min_medium_size)) {
+    if (flags & PALLOC_DYNAMIC) {
+      seek_os(fd, min_header_size, SEEK_SET);
+      write_os(fd, z, min_medium_size - min_header_size);
       size = min_medium_size;
       seek_os(fd, 0, SEEK_SET);
     } else {
@@ -217,34 +231,35 @@ PALLOC_RESPONSE palloc_init(PALLOC_FD fd, PALLOC_FLAGS flags) {
   }
 
   // Mark remainder of medium free
-  // TODO: make this nicer to read
-  PALLOC_SIZE   marker = htons((PALLOC_SIZE)((size - min_header_size - (sizeof(PALLOC_SIZE)*2)) | PALLOC_MARKER_FREE));
-  PALLOC_OFFSET ptr    = htons((PALLOC_OFFSET)0);
-  seek_os(fd, min_header_size, SEEK_SET);
-  if (write_os(fd, &marker, sizeof(PALLOC_SIZE)) != sizeof(PALLOC_SIZE)) {
-    perror("palloc_init::write_marker_start");
-    free(z);
-    free(hdr);
-    return PALLOC_ERR;
-  }
-  if (write_os(fd, &ptr, sizeof(PALLOC_OFFSET)) != sizeof(PALLOC_OFFSET)) {
-    perror("palloc_init::write_ptr_prev");
-    free(z);
-    free(hdr);
-    return PALLOC_ERR;
-  }
-  if (write_os(fd, &ptr, sizeof(PALLOC_OFFSET)) != sizeof(PALLOC_OFFSET)) {
-    perror("palloc_init::write_ptr_next");
-    free(z);
-    free(hdr);
-    return PALLOC_ERR;
-  }
-  seek_os(fd, 0 - sizeof(PALLOC_SIZE), SEEK_END);
-  if (write_os(fd, &marker, sizeof(PALLOC_SIZE)) != sizeof(PALLOC_SIZE)) {
-    perror("palloc_init::write_marker_end");
-    free(z);
-    free(hdr);
-    return PALLOC_ERR;
+  if (size >= min_medium_size) {
+    PALLOC_SIZE   marker = htons((PALLOC_SIZE)((size - min_header_size - (sizeof(PALLOC_SIZE)*2)) | PALLOC_MARKER_FREE));
+    PALLOC_OFFSET ptr    = htons((PALLOC_OFFSET)0);
+    seek_os(fd, min_header_size, SEEK_SET);
+    if (write_os(fd, &marker, sizeof(PALLOC_SIZE)) != sizeof(PALLOC_SIZE)) {
+      perror("palloc_init::write_marker_start");
+      free(z);
+      free(hdr);
+      return PALLOC_ERR;
+    }
+    if (write_os(fd, &ptr, sizeof(PALLOC_OFFSET)) != sizeof(PALLOC_OFFSET)) {
+      perror("palloc_init::write_ptr_prev");
+      free(z);
+      free(hdr);
+      return PALLOC_ERR;
+    }
+    if (write_os(fd, &ptr, sizeof(PALLOC_OFFSET)) != sizeof(PALLOC_OFFSET)) {
+      perror("palloc_init::write_ptr_next");
+      free(z);
+      free(hdr);
+      return PALLOC_ERR;
+    }
+    seek_os(fd, 0 - sizeof(PALLOC_SIZE), SEEK_END);
+    if (write_os(fd, &marker, sizeof(PALLOC_SIZE)) != sizeof(PALLOC_SIZE)) {
+      perror("palloc_init::write_marker_end");
+      free(z);
+      free(hdr);
+      return PALLOC_ERR;
+    }
   }
 
   free(z);
