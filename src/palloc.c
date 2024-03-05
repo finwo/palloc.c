@@ -85,6 +85,7 @@ const char *expected_header      = "PBA\0";
 struct palloc_fd_info {
   void *next;
   PALLOC_FD     fd;
+  PALLOC_FLAGS  flags;
   PALLOC_OFFSET first_free;
   PALLOC_SIZE   header_size;
   PALLOC_SIZE   medium_size;
@@ -92,19 +93,36 @@ struct palloc_fd_info {
 
 struct palloc_fd_info *_fd_info = NULL;
 
+PALLOC_SIZE _palloc_marker(PALLOC_FD fd, PALLOC_OFFSET ptr) {
+  if (!ptr) return 0;
+  PALLOC_SIZE result;
+  seek_os(fd, ptr, SEEK_SET);
+  read_os(fd, &result, sizeof(PALLOC_SIZE));
+  result = be64toh(result);
+  return result;
+}
+
+PALLOC_SIZE _palloc_size(PALLOC_FD fd, PALLOC_OFFSET ptr) {
+  return _palloc_marker(fd, ptr) & (~PALLOC_MARKER_FREE);
+}
+
 struct palloc_fd_info * _palloc_info(PALLOC_FD fd) {
   PALLOC_OFFSET pos;
   PALLOC_SIZE   marker;
 
   // Attempt to fetch cached version
   struct palloc_fd_info *finfo = _fd_info;
-  while(finfo && (finfo->fd != fd)) finfo = finfo->next;
+  while(finfo) {
+    if (finfo->fd == fd) break;
+    finfo = finfo->next;
+  }
 
   // Build new if no cached version was found
   if (!finfo) {
-    finfo = malloc(sizeof(struct palloc_fd_info));
+    finfo       = calloc(1, sizeof(struct palloc_fd_info));
     finfo->next = _fd_info;
     finfo->fd   = fd;
+    _fd_info    = finfo;
 
     // Get the current medium size
     finfo->medium_size = seek_os(fd, 0, SEEK_END);
@@ -112,12 +130,11 @@ struct palloc_fd_info * _palloc_info(PALLOC_FD fd) {
     // Detect header size
     finfo->header_size = expected_header_size + sizeof(PALLOC_FLAGS);
     char *hdr       = malloc(expected_header_size);
-    PALLOC_FLAGS flags;
     seek_os(fd, 0, SEEK_SET);
     read_os(fd, hdr   , expected_header_size);
-    read_os(fd, &flags, sizeof(PALLOC_FLAGS));
-    flags = be32toh(flags);
-    if (flags & PALLOC_EXTENDED) {
+    read_os(fd, &(finfo->flags), sizeof(PALLOC_FLAGS));
+    finfo->flags = be32toh(finfo->flags);
+    if (finfo->flags & PALLOC_EXTENDED) {
       // Reserved for future use
       // header_size = bigger
     }
@@ -175,6 +192,9 @@ PALLOC_FD palloc_open(const char *filename, PALLOC_FLAGS flags) {
     return 0;
   }
 
+  // Pre-cache info
+  _palloc_info(fd);
+
   free(filepath);
   return fd;
 }
@@ -184,10 +204,13 @@ PALLOC_RESPONSE palloc_close(PALLOC_FD fd) {
   // Free fd info if we have it
   struct palloc_fd_info *finfo_cur = _fd_info;
   struct palloc_fd_info *finfo_prv = NULL;
-  while(finfo_cur && (finfo_cur->fd != fd)) {
+
+  while(finfo_cur) {
+    if (finfo_cur->fd == fd) break;
     finfo_prv = finfo_cur;
     finfo_cur = finfo_cur->next;
   }
+
   if (finfo_cur) {
     // Point prev to our next
     if (finfo_prv) finfo_prv->next = finfo_cur->next;
@@ -313,7 +336,150 @@ PALLOC_RESPONSE palloc_init(PALLOC_FD fd, PALLOC_FLAGS flags) {
 }
 
 PALLOC_OFFSET palloc(PALLOC_FD fd, PALLOC_SIZE size) {
-  return 0;
+  struct palloc_fd_info *finfo = _palloc_info(fd);
+
+  PALLOC_SIZE marker, selected_size;
+  PALLOC_OFFSET free_prev = 0, free_pprev = 0;
+  PALLOC_OFFSET free_next = 0, free_nnext = 0;
+
+  // Handle minimum size
+  if (size < (sizeof(PALLOC_OFFSET)*2)) {
+    size = sizeof(PALLOC_OFFSET) * 2;
+  }
+
+  // Iterate free blocks to find one that'll fit
+  PALLOC_OFFSET selected = finfo->first_free;
+  while(selected && (_palloc_size(fd, selected) < size)) {
+    free_prev = selected;
+    seek_os(fd, selected + sizeof(PALLOC_SIZE) + sizeof(PALLOC_OFFSET), SEEK_SET);
+    read_os(fd, &selected, sizeof(PALLOC_OFFSET));
+    selected = be64toh(selected);
+  }
+
+  // Handle full(-ish) medium when not dynamic
+  if ((!selected) && (!(finfo->flags & PALLOC_DYNAMIC))) {
+    return 0;
+  }
+
+  // Allocate new space if dynamic and needed
+  if (!selected) {
+    marker    = htobe64(size | PALLOC_MARKER_FREE);
+    free_prev = htobe64(free_prev);
+    selected  = seek_os(fd, 0, SEEK_END);
+    if (write_os(fd, &marker, sizeof(PALLOC_SIZE)) != sizeof(PALLOC_SIZE)) {
+      perror("palloc::write");
+      return 0;
+    }
+    if (write_os(fd, &free_prev, sizeof(PALLOC_OFFSET)) != sizeof(PALLOC_OFFSET)) {
+      perror("palloc::write");
+      return 0;
+    }
+    free_prev = be64toh(free_prev);
+    seek_os(fd, size - sizeof(PALLOC_OFFSET), SEEK_CUR);
+    if (write_os(fd, &marker, sizeof(PALLOC_SIZE)) != sizeof(PALLOC_SIZE)) {
+      perror("palloc::write");
+      return 0;
+    }
+    finfo->first_free  = selected;
+    finfo->medium_size = seek_os(fd, 0, SEEK_CUR);
+  }
+
+  // Fetch selected block info
+  marker = _palloc_marker(fd, selected);
+  selected_size = _palloc_size(fd, selected);
+
+  // Split block if large enough
+  // marker,free_next,free_prev & fd position are dirty after this
+  if ((selected_size - size) > ((sizeof(PALLOC_SIZE)*2)+(sizeof(PALLOC_OFFSET)*2))) {
+    marker    = htobe64(size | PALLOC_MARKER_FREE);
+    free_next = htobe64(selected + size + (sizeof(PALLOC_SIZE)*2));
+    free_prev = htobe64(selected);
+    // Update selected block
+    seek_os(fd, selected, SEEK_SET);
+    if (write_os(fd, &marker, sizeof(PALLOC_SIZE)) != sizeof(PALLOC_SIZE)) {
+      perror("palloc::write");
+      return 0;
+    }
+    seek_os(fd, sizeof(PALLOC_OFFSET), SEEK_CUR);
+    read_os(fd, &free_nnext, sizeof(PALLOC_OFFSET));
+    seek_os(fd, 0 - sizeof(PALLOC_OFFSET), SEEK_CUR);
+    if (write_os(fd, &free_next, sizeof(PALLOC_OFFSET)) != sizeof(PALLOC_OFFSET)) {
+      perror("palloc::write");
+      return 0;
+    }
+    seek_os(fd, size - (sizeof(PALLOC_OFFSET)*2), SEEK_CUR);
+    if (write_os(fd, &marker, sizeof(PALLOC_SIZE)) != sizeof(PALLOC_SIZE)) {
+      perror("palloc::write");
+      return 0;
+    }
+    // Initialize new free block
+    marker = htobe64((selected_size - size - (sizeof(PALLOC_SIZE)*2)) | PALLOC_MARKER_FREE);
+    free_pprev = htobe64(seek_os(fd, 0, SEEK_CUR));
+    if (write_os(fd, &marker, sizeof(PALLOC_SIZE)) != sizeof(PALLOC_SIZE)) {
+      perror("palloc::write");
+      return 0;
+    }
+    if (write_os(fd, &free_prev, sizeof(PALLOC_OFFSET)) != sizeof(PALLOC_OFFSET)) {
+      perror("palloc::write");
+      return 0;
+    }
+    if (write_os(fd, &free_nnext, sizeof(PALLOC_OFFSET)) != sizeof(PALLOC_OFFSET)) {
+      perror("palloc::write");
+      return 0;
+    }
+    seek_os(fd, (be64toh(marker) & (~PALLOC_MARKER_FREE)) - (sizeof(PALLOC_OFFSET)*2), SEEK_CUR);
+    if (write_os(fd, &marker, sizeof(PALLOC_SIZE)) != sizeof(PALLOC_SIZE)) {
+      perror("palloc::write");
+      return 0;
+    }
+    // Update next block's pointer
+    free_nnext = be64toh(free_nnext);
+    if (free_nnext) {
+      seek_os(fd, free_nnext + sizeof(PALLOC_SIZE), SEEK_SET);
+      if (write_os(fd, &free_pprev, sizeof(PALLOC_OFFSET)) != sizeof(PALLOC_OFFSET)) {
+        perror("palloc::write");
+        return 0;
+      }
+    }
+  }
+
+  // Size is now block size, not given size
+  size = _palloc_size(fd, selected);
+
+  // Remove selected free block from the doubly-linked-list
+  seek_os(fd, selected + sizeof(PALLOC_SIZE), SEEK_SET);
+  read_os(fd, &free_prev, sizeof(PALLOC_OFFSET));
+  read_os(fd, &free_next, sizeof(PALLOC_OFFSET));
+  free_prev = be64toh(free_prev);
+  free_next = be64toh(free_next);
+  if (free_prev) {
+    free_next = htobe64(free_next);
+    seek_os(fd, free_prev + sizeof(PALLOC_SIZE) + sizeof(PALLOC_OFFSET), SEEK_SET);
+    write_os(fd, &free_next, sizeof(PALLOC_OFFSET));
+    free_next = be64toh(free_next);
+  }
+  if (free_next) {
+    free_prev = htobe64(free_prev);
+    seek_os(fd, free_next + sizeof(PALLOC_SIZE), SEEK_SET);
+    write_os(fd, &free_prev, sizeof(PALLOC_OFFSET));
+    free_prev = be64toh(free_prev);
+  }
+
+  // Mark selected block as non-free
+  marker = htobe64(size);
+  seek_os(fd, selected, SEEK_SET);
+  if (write_os(fd, &marker, sizeof(PALLOC_SIZE)) != sizeof(PALLOC_SIZE)) {
+    perror("palloc::write");
+    return 0;
+  }
+  seek_os(fd, size, SEEK_CUR);
+  if (write_os(fd, &marker, sizeof(PALLOC_SIZE)) != sizeof(PALLOC_SIZE)) {
+    perror("palloc::write");
+    return 0;
+  }
+
+  // And return the pointer to the start of the data
+  return selected + sizeof(PALLOC_SIZE);
 }
 
 /* uint64_t palloc(struct palloc_t *pt, size_t size) { */
@@ -490,7 +656,7 @@ PALLOC_RESPONSE pfree(PALLOC_FD fd, PALLOC_OFFSET ptr) {
 }
 
 PALLOC_SIZE palloc_size(PALLOC_FD fd, PALLOC_OFFSET ptr) {
-  return 0;
+  return _palloc_size(fd, ptr - sizeof(PALLOC_SIZE));
 }
 
 PALLOC_OFFSET palloc_next(PALLOC_FD fd, PALLOC_OFFSET ptr) {
