@@ -465,6 +465,11 @@ PALLOC_OFFSET palloc(PALLOC_FD fd, PALLOC_SIZE size) {
     free_prev = be64toh(free_prev);
   }
 
+  // Fix first free
+  if (finfo->first_free == selected) {
+    finfo->first_free = free_next;
+  }
+
   // Mark selected block as non-free
   marker = htobe64(size);
   seek_os(fd, selected, SEEK_SET);

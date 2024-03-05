@@ -102,100 +102,86 @@ void test_init() {
   ASSERT("size after small alloc is 40", size == 40);
   ASSERT("size of the alloc is indicated as 16", palloc_size(fd, my_alloc) == 16);
 
-
-
-
-
+  my_alloc = palloc(fd, 32);
+  size = seek_os(fd, 0, SEEK_END);
+  ASSERT("first allocation is located at 48", my_alloc == 48);
+  ASSERT("size after small alloc is 88", size == 88);
+  ASSERT("size of the alloc is indicated as 32", palloc_size(fd, my_alloc) == 32);
   palloc_close(fd);
-  free(z);
-  return;
 
-  /* uint64_t my_alloc; */
-  /* uint64_t alloc_0; */
-  /* uint64_t alloc_1; */
-  /* uint64_t alloc_2; */
-  /* uint64_t alloc_3; */
-  /* uint64_t alloc_4; */
-  /* uint64_t alloc_5; */
-  /* uint64_t alloc_6; */
-  /* uint64_t alloc_7; */
-
-
-
-  /* // Allocation on dynamic medium grows the file */
-  /* my_alloc = palloc(pt, 4); */
-  /* ASSERT("first allocation is located at 16", my_alloc == 16); */
-  /* ASSERT("size after small alloc is 40", pt->size == 40); */
-  /* ASSERT("size of the alloc is indicated as 16", palloc_size(pt, my_alloc) == 16); */
-
-  /* my_alloc = palloc(pt, 32); */
-  /* ASSERT("first allocation is located at 48", my_alloc == 48); */
-  /* ASSERT("size after small alloc is 88", pt->size == 88); */
-  /* ASSERT("size of the alloc is indicated as 32", palloc_size(pt, my_alloc) == 32); */
-  /* palloc_close(pt); */
-
-  /* // Write empty larger file to test with as medium */
-  /* int fd = open_os(testfile, O_RDWR); */
-  /* lseek_os(fd, 0, SEEK_SET); */
-  /* write_os(fd, z, 1024*1024); */
+  // Write empty larger file to test with as medium
+  fd = open_os(testfile, O_RDWR);
+  seek_os(fd, 0, SEEK_SET);
+  write_os(fd, z, 1024*1024);
   /* close_os(fd); */
 
-  /* // Initialize larger medium */
-  /* pt = palloc_init(testfile, PALLOC_DEFAULT); */
+  // Initialize larger medium
+  palloc_init(fd, PALLOC_DEFAULT);
+  size = seek_os(fd, 0, SEEK_END);
   /* ASSERT("pt returned non-null for dynamic new file", pt != NULL); */
-  /* ASSERT("size of newly created file is 1M", pt->size == (1024*1024)); */
+  ASSERT("size of non-dynamic file is still 1M", size == (1024*1024));
   /* ASSERT("header of newly created file is 8", pt->header_size == 8); */
 
-  /* // Allocation on static medium works */
-  /* alloc_0 = palloc(pt, 4); */
-  /* ASSERT("1st allocation is located at 16", alloc_0 == 16); */
+  PALLOC_OFFSET alloc_0;
+  PALLOC_OFFSET alloc_1;
+  PALLOC_OFFSET alloc_2;
+  PALLOC_OFFSET alloc_3;
+  PALLOC_OFFSET alloc_4;
+  PALLOC_OFFSET alloc_5;
+  PALLOC_OFFSET alloc_6;
+  PALLOC_OFFSET alloc_7;
 
-  /* // Allocation on static medium works */
-  /* alloc_1 = palloc(pt, 32); */
-  /* ASSERT("2nd allocation is located at 48", alloc_1 == 48); */
+  // Allocation on static medium works
+  alloc_0 = palloc(fd, 4);
+  ASSERT("1st allocation is located at 16", alloc_0 == 16);
 
-  /* // Allocation on static medium works */
-  /* alloc_2 = palloc(pt, 32); */
-  /* ASSERT("3rd allocation is located at 96", alloc_2 == 96); */
+  // Allocation on static medium works
+  alloc_1 = palloc(fd, 32);
+  ASSERT("2nd allocation is located at 48", alloc_1 == 48);
 
-  /* // Allocation on static medium works */
-  /* alloc_3 = palloc(pt, 32); */
-  /* ASSERT("4th allocation is located at 144", alloc_3 == 144); */
+  // Allocation on static medium works
+  alloc_2 = palloc(fd, 32);
+  ASSERT("3rd allocation is located at 96", alloc_2 == 96);
 
-  /* // Allocation on static medium works */
-  /* alloc_4 = palloc(pt, 32); */
-  /* ASSERT("5th allocation is located at 192", alloc_4 == 192); */
+  // Allocation on static medium works
+  alloc_3 = palloc(fd, 32);
+  ASSERT("4th allocation is located at 144", alloc_3 == 144);
 
-  /* // Free up a couple */
-  /* pfree(pt, alloc_3); */
-  /* pfree(pt, alloc_0); */
-  /* pfree(pt, alloc_2); */
+  // Allocation on static medium works
+  alloc_4 = palloc(fd, 32);
+  ASSERT("5th allocation is located at 192", alloc_4 == 192);
 
-  /* // Allocation on static medium works */
-  /* alloc_5 = palloc(pt, 40); */
-  /* ASSERT("6th allocation, after 3 freed at org alloc", alloc_5 == alloc_2); */
+  // Free up a couple
+  pfree(fd, alloc_3);
+  pfree(fd, alloc_0);
+  pfree(fd, alloc_2);
+
+  // Allocation on static medium works
+  alloc_5 = palloc(fd, 40);
+  ASSERT("6th allocation, after 3 freed at org alloc", alloc_5 == alloc_2);
 
   /* // Static medium has a free space, let's assign another 64 bytes and skip that one free */
-  /* alloc_6 = palloc(pt, 64); */
+  /* alloc_6 = palloc(fd, 64); */
   /* ASSERT("7th allocation, skipping gap, at 240", alloc_6 == 240); */
 
   /* // Assigning more than available space should fail */
-  /* alloc_7 = palloc(pt, 1024*1024); */
+  /* alloc_7 = palloc(fd, 1024*1024); */
   /* ASSERT("8th allocation, being too large, fails", alloc_7 == 0); */
 
   /* // Iteration */
-  /* ASSERT("1st is indicated as first allocated", palloc_first(pt) == alloc_1); */
-  /* ASSERT("2nd is indicated as filled gap", palloc_next(pt, alloc_1) == alloc_5); */
-  /* ASSERT("3nd is indicated as original 5th", palloc_next(pt, alloc_5) == alloc_4); */
-  /* ASSERT("4th is indicated as original 7th", palloc_next(pt, alloc_4) == alloc_6); */
-  /* ASSERT("5th is indicated as not existing", palloc_next(pt, alloc_6) == 0); */
+  /* ASSERT("1st is indicated as first allocated", palloc_first(fd) == alloc_1); */
+  /* ASSERT("2nd is indicated as filled gap", palloc_next(fd, alloc_1) == alloc_5); */
+  /* ASSERT("3nd is indicated as original 5th", palloc_next(fd, alloc_5) == alloc_4); */
+  /* ASSERT("4th is indicated as original 7th", palloc_next(fd, alloc_4) == alloc_6); */
+  /* ASSERT("5th is indicated as not existing", palloc_next(fd, alloc_6) == 0); */
 
-  /* my_alloc = palloc(pt, 1); */
-  /* ASSERT("1st is indicated as filled gap after new alloc", palloc_first(pt) == my_alloc); */
+  /* my_alloc = palloc(fd, 1); */
+  /* ASSERT("1st is indicated as filled gap after new alloc", palloc_first(fd) == my_alloc); */
 
-  /* palloc_close(pt); */
+  palloc_close(fd);
 
   free(z);
+  return;
 }
 
 int main() {
