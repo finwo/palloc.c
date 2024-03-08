@@ -29,6 +29,22 @@ pfree(fd, first);
 palloc_close(fd);
 ```
 
+Installation
+------------
+
+This library makes use of [dep](https://github.com/finwo/dep) to manage it's
+dependencies and exports.
+
+```sh
+dep add finwo/palloc
+```
+
+Dependencies:
+
+- [finwo/assert](https://github.com/finwo/assert.h)
+- [finwo/canonical-path](https://github.com/finwo/canonical-path.c)
+- [finwo/endian](https://github.com/finwo/endian.h)
+
 API
 ---
 
