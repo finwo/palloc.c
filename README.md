@@ -122,6 +122,7 @@ API
 #define PALLOC_OK (0)
 ```
 
+</details>
 <details>
   <summary>PALLOC_ERR</summary>
 
@@ -131,6 +132,7 @@ API
 #define PALLOC_ERR (-1)
 ```
 
+</details>
 
 ### Methods
 
@@ -144,6 +146,7 @@ API
 PALLOC_FD palloc_open(const char *filename, PALLOC_FLAGS flags);
 ```
 
+</details>
 <details>
   <summary>palloc_init(fd, flags)</summary>
 
@@ -164,6 +167,7 @@ PALLOC_RESPONSE palloc_init(PALLOC_FD fd, PALLOC_FLAGS flags);
 PALLOC_RESPONSE palloc_close(PALLOC_FD fd);
 ```
 
+</details>
 <details>
   <summary>palloc(fd,size)</summary>
 
