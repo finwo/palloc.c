@@ -769,48 +769,43 @@ PALLOC_SIZE palloc_size(PALLOC_FD fd, PALLOC_OFFSET ptr) {
 }
 
 PALLOC_OFFSET palloc_next(PALLOC_FD fd, PALLOC_OFFSET ptr) {
+  struct palloc_fd_info *finfo = _palloc_info(fd);
+  PALLOC_SIZE marker;
+
+  // Easy resolve
+  if (ptr >= finfo->medium_size) return 0;
+
+  // Handle first
+  if (!ptr) {
+    ptr = finfo->header_size;
+    seek_os(fd, ptr, SEEK_SET);
+    if (read_os(fd, &marker, sizeof(marker)) != sizeof(marker)) return 0;
+    marker = be64toh(marker);
+    if (!(marker & PALLOC_MARKER_FREE)) return ptr + sizeof(marker);
+
+  // Convert pointer to internal usage
+  } else {
+    ptr -= sizeof(PALLOC_SIZE);
+  }
+
+  // Read the marker of the given block
+  seek_os(fd, ptr, SEEK_SET);
+  if (read_os(fd, &marker, sizeof(marker)) != sizeof(marker)) return 0;
+  marker = be64toh(marker);
+
+  // Skip the first one
+  ptr = ptr + (sizeof(PALLOC_SIZE) * 2) + (marker & (~PALLOC_MARKER_FREE));
+  while(1) {
+    if (ptr >= finfo->medium_size) return 0;
+    seek_os(fd, ptr, SEEK_SET);
+    if (read_os(fd, &marker, sizeof(marker)) != sizeof(marker)) return 0;
+    marker = be64toh(marker);
+    if (!(marker & PALLOC_MARKER_FREE)) return ptr + sizeof(marker);
+    ptr += (sizeof(marker)*2) + (marker & (~PALLOC_MARKER_FREE));
+  }
+
   return 0;
 }
-
-
-
-/* // Gets the size of the blob */
-/* uint64_t palloc_size(struct palloc_t *pt, uint64_t ptr) { */
-/*   uint64_t marker; */
-/*   lseek_os(pt->descriptor, ptr - sizeof(marker), SEEK_SET); */
-/*   if (read_os(pt->descriptor, &marker, sizeof(marker)) <= 0) return 0; */
-/*   return be64toh(marker) & (~PALLOC_MARKER_FREE); */
-/* } */
-
-/* // Fetches the first allocated */
-/* uint64_t palloc_first(struct palloc_t *pt) { */
-/*   uint64_t marker; */
-/*   uint64_t idx = pt->header_size; */
-
-/*   while(1) { */
-/*     lseek_os(pt->descriptor, idx, SEEK_SET); */
-/*     if (read_os(pt->descriptor, &marker, sizeof(marker)) <= 0) return 0; */
-/*     marker = be64toh(marker); */
-/*     if (!(marker & PALLOC_MARKER_FREE)) return idx + sizeof(marker); */
-/*     idx += (sizeof(marker)*2) + (marker & (~PALLOC_MARKER_FREE)); */
-/*   } */
-
-/* } */
-
-/* // Fetches the next allocated */
-/* uint64_t palloc_next(struct palloc_t *pt, uint64_t ptr) { */
-/*   uint64_t marker; */
-/*   lseek_os(pt->descriptor, ptr - sizeof(marker), SEEK_SET); */
-/*   if (read_os(pt->descriptor, &marker, sizeof(marker)) <= 0) return 0; */
-/*   uint64_t idx = ptr + sizeof(marker) + (be64toh(marker) & (~PALLOC_MARKER_FREE)); */
-/*   while(1) { */
-/*     lseek_os(pt->descriptor, idx, SEEK_SET); */
-/*     if (read_os(pt->descriptor, &marker, sizeof(marker)) <= 0) return 0; */
-/*     marker = be64toh(marker); */
-/*     if (!(marker & PALLOC_MARKER_FREE)) return idx + sizeof(marker); */
-/*     idx += (sizeof(marker)*2) + (marker & (~PALLOC_MARKER_FREE)); */
-/*   } */
-/* } */
 
 #ifdef __cplusplus
 } // extern "C"

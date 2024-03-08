@@ -171,15 +171,15 @@ void test_init() {
   alloc_7 = palloc(fd, 1024*1024);
   ASSERT("8th allocation, being too large, fails", alloc_7 == 0);
 
-  /* // Iteration */
-  /* ASSERT("1st is indicated as first allocated", palloc_first(fd) == alloc_1); */
-  /* ASSERT("2nd is indicated as filled gap", palloc_next(fd, alloc_1) == alloc_5); */
-  /* ASSERT("3nd is indicated as original 5th", palloc_next(fd, alloc_5) == alloc_4); */
-  /* ASSERT("4th is indicated as original 7th", palloc_next(fd, alloc_4) == alloc_6); */
-  /* ASSERT("5th is indicated as not existing", palloc_next(fd, alloc_6) == 0); */
+  // Iteration
+  ASSERT("1st is indicated as first allocated", palloc_next(fd, 0      ) == alloc_1);
+  ASSERT("2nd is indicated as filled gap"     , palloc_next(fd, alloc_1) == alloc_5);
+  ASSERT("3nd is indicated as original 5th"   , palloc_next(fd, alloc_5) == alloc_4);
+  ASSERT("4th is indicated as original 7th"   , palloc_next(fd, alloc_4) == alloc_6);
+  ASSERT("5th is indicated as not existing"   , palloc_next(fd, alloc_6) == 0      );
 
-  /* my_alloc = palloc(fd, 1); */
-  /* ASSERT("1st is indicated as filled gap after new alloc", palloc_first(fd) == my_alloc); */
+  my_alloc = palloc(fd, 1);
+  ASSERT("1st is indicated as filled gap after new alloc", palloc_next(fd, 0) == my_alloc);
 
   palloc_close(fd);
 
