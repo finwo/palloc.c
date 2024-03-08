@@ -6,6 +6,28 @@ Simple embeddable persistent-allocation library for C
 Allows your program to allocate and iterate over persistently allocated blobs
 of data within a file or other file-like medium.
 
+Example
+-------
+
+```C
+// Pre-open the file descriptor palloc will be operating on
+int fd = palloc_open("path/to/file.db", PALLOC_DEFAULT | PALLOC_DYNAMIC);
+
+// Fetch the first allocated blob
+PALLOC_OFFSET first = palloc_next(fd, 0);
+
+// Fetch the second allocated blob
+PALLOC_OFFSET second = palloc_next(fd, first);
+
+// Allocate a new blob of 1024 bytes
+PALLOC_OFFSET third = palloc(fd, 1024);
+
+// Free the first blob
+pfree(fd, first);
+
+// Close file descriptor and clear internal cache on it
+palloc_close(fd);
+```
 
 API
 ---

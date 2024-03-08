@@ -20,6 +20,7 @@ extern "C" {
 #include <unistd.h>
 #endif
 
+// OS-specific IO macros {{{
 #if defined(_WIN32) || defined(_WIN64)
 #define stat_os __stat64
 #define fstat_os _fstat64
@@ -55,6 +56,7 @@ extern "C" {
 #define unlink_os unlink
 #define OPENMODE  (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP)
 #endif
+// }}}
 
 void test_init() {
   char *testfile = "pizza.db";
