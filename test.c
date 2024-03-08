@@ -152,21 +152,24 @@ void test_init() {
   ASSERT("5th allocation is located at 192", alloc_4 == 192);
 
   // Free up a couple
-  pfree(fd, alloc_3);
-  pfree(fd, alloc_0);
-  pfree(fd, alloc_2);
+  ASSERT("free(4) returns OK", pfree(fd, alloc_3) == PALLOC_OK);
+  ASSERT("free(1) returns OK", pfree(fd, alloc_0) == PALLOC_OK);
+  ASSERT("free(3) returns OK", pfree(fd, alloc_2) == PALLOC_OK);
+
+  // Check blocks have been merged
+  ASSERT("Consecutive free blocks have been merged", palloc_size(fd, alloc_2) == 32 + 32 + (sizeof(uint64_t)*2));
 
   // Allocation on static medium works
   alloc_5 = palloc(fd, 40);
   ASSERT("6th allocation, after 3 freed at org alloc", alloc_5 == alloc_2);
 
-  /* // Static medium has a free space, let's assign another 64 bytes and skip that one free */
-  /* alloc_6 = palloc(fd, 64); */
-  /* ASSERT("7th allocation, skipping gap, at 240", alloc_6 == 240); */
+  // Static medium has a free space, let's assign another 64 bytes and skip that one free
+  alloc_6 = palloc(fd, 64);
+  ASSERT("7th allocation, skipping gap, at 240", alloc_6 == 240);
 
-  /* // Assigning more than available space should fail */
-  /* alloc_7 = palloc(fd, 1024*1024); */
-  /* ASSERT("8th allocation, being too large, fails", alloc_7 == 0); */
+  // Assigning more than available space should fail
+  alloc_7 = palloc(fd, 1024*1024);
+  ASSERT("8th allocation, being too large, fails", alloc_7 == 0);
 
   /* // Iteration */
   /* ASSERT("1st is indicated as first allocated", palloc_first(fd) == alloc_1); */
