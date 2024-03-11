@@ -30,6 +30,13 @@ extern "C" {
 
 #include "palloc.h"
 
+#define PALLOC_HTOBE_FLAGS(x)  htobe32(x)
+#define PALLOC_HTOBE_SIZE(x)   htobe64(x)
+#define PALLOC_HTOBE_OFFSET(x) htobe64(x)
+#define PALLOC_BETOH_FLAGS(x)  be32toh(x)
+#define PALLOC_BETOH_SIZE(x)   be64toh(x)
+#define PALLOC_BETOH_OFFSET(x) be64toh(x)
+
 /* struct palloc_t { */
 /*   char     *filename; */
 /*   int      descriptor; */
@@ -98,7 +105,7 @@ PALLOC_SIZE _palloc_marker(PALLOC_FD fd, PALLOC_OFFSET ptr) {
   PALLOC_SIZE result;
   seek_os(fd, ptr, SEEK_SET);
   read_os(fd, &result, sizeof(PALLOC_SIZE));
-  result = be64toh(result);
+  result = PALLOC_BETOH_SIZE(result);
   return result;
 }
 
@@ -133,7 +140,7 @@ struct palloc_fd_info * _palloc_info(PALLOC_FD fd) {
     seek_os(fd, 0, SEEK_SET);
     read_os(fd, hdr   , expected_header_size);
     read_os(fd, &(finfo->flags), sizeof(PALLOC_FLAGS));
-    finfo->flags = be32toh(finfo->flags);
+    finfo->flags = PALLOC_BETOH_FLAGS(finfo->flags);
     if (finfo->flags & PALLOC_EXTENDED) {
       // Reserved for future use
       // header_size = bigger
@@ -147,7 +154,7 @@ struct palloc_fd_info * _palloc_info(PALLOC_FD fd) {
         perror("palloc_info::read");
         exit(1);
       }
-      marker = be64toh(marker);
+      marker = PALLOC_BETOH_SIZE(marker);
       if (marker & PALLOC_MARKER_FREE) {
         break;
       }
@@ -287,7 +294,7 @@ PALLOC_RESPONSE palloc_init(PALLOC_FD fd, PALLOC_FLAGS flags) {
   }
 
   // Build & write new header
-  PALLOC_FLAGS nflags = htobe32(flags & (~PALLOC_SYNC));
+  PALLOC_FLAGS nflags = PALLOC_HTOBE_FLAGS(flags & (~PALLOC_SYNC));
   memcpy(hdr, expected_header, expected_header_size);
   memcpy(hdr + expected_header_size, &nflags, sizeof(PALLOC_FLAGS));
   seek_os(fd, 0, SEEK_SET);
@@ -300,8 +307,8 @@ PALLOC_RESPONSE palloc_init(PALLOC_FD fd, PALLOC_FLAGS flags) {
 
   // Mark remainder of medium free
   if (size >= min_medium_size) {
-    PALLOC_SIZE   marker = htobe64((PALLOC_SIZE)((size - min_header_size - (sizeof(PALLOC_SIZE)*2)) | PALLOC_MARKER_FREE));
-    PALLOC_OFFSET ptr    = htobe64((PALLOC_OFFSET)0);
+    PALLOC_SIZE   marker = PALLOC_HTOBE_SIZE((PALLOC_SIZE)((size - min_header_size - (sizeof(PALLOC_SIZE)*2)) | PALLOC_MARKER_FREE));
+    PALLOC_OFFSET ptr    = PALLOC_HTOBE_OFFSET((PALLOC_OFFSET)0);
     seek_os(fd, min_header_size, SEEK_SET);
     if (write_os(fd, &marker, sizeof(PALLOC_SIZE)) != sizeof(PALLOC_SIZE)) {
       perror("palloc_init::write_marker_start");
@@ -353,7 +360,7 @@ PALLOC_OFFSET palloc(PALLOC_FD fd, PALLOC_SIZE size) {
     free_prev = selected;
     seek_os(fd, selected + sizeof(PALLOC_SIZE) + sizeof(PALLOC_OFFSET), SEEK_SET);
     read_os(fd, &selected, sizeof(PALLOC_OFFSET));
-    selected = be64toh(selected);
+    selected = PALLOC_BETOH_OFFSET(selected);
   }
 
   // Handle full(-ish) medium when not dynamic
@@ -363,8 +370,8 @@ PALLOC_OFFSET palloc(PALLOC_FD fd, PALLOC_SIZE size) {
 
   // Allocate new space if dynamic and needed
   if (!selected) {
-    marker    = htobe64(size | PALLOC_MARKER_FREE);
-    free_prev = htobe64(free_prev);
+    marker    = PALLOC_HTOBE_SIZE(size | PALLOC_MARKER_FREE);
+    free_prev = PALLOC_HTOBE_OFFSET(free_prev);
     selected  = seek_os(fd, 0, SEEK_END);
     if (write_os(fd, &marker, sizeof(PALLOC_SIZE)) != sizeof(PALLOC_SIZE)) {
       perror("palloc::write");
@@ -374,7 +381,7 @@ PALLOC_OFFSET palloc(PALLOC_FD fd, PALLOC_SIZE size) {
       perror("palloc::write");
       return 0;
     }
-    free_prev = be64toh(free_prev);
+    free_prev = PALLOC_BETOH_OFFSET(free_prev);
     seek_os(fd, size - sizeof(PALLOC_OFFSET), SEEK_CUR);
     if (write_os(fd, &marker, sizeof(PALLOC_SIZE)) != sizeof(PALLOC_SIZE)) {
       perror("palloc::write");
@@ -391,9 +398,9 @@ PALLOC_OFFSET palloc(PALLOC_FD fd, PALLOC_SIZE size) {
   // Split block if large enough
   // marker,free_next,free_prev & fd position are dirty after this
   if ((selected_size - size) > ((sizeof(PALLOC_SIZE)*2)+(sizeof(PALLOC_OFFSET)*2))) {
-    marker    = htobe64(size | PALLOC_MARKER_FREE);
-    free_next = htobe64(selected + size + (sizeof(PALLOC_SIZE)*2));
-    free_prev = htobe64(selected);
+    marker    = PALLOC_HTOBE_SIZE(size | PALLOC_MARKER_FREE);
+    free_next = PALLOC_HTOBE_OFFSET(selected + size + (sizeof(PALLOC_SIZE)*2));
+    free_prev = PALLOC_HTOBE_OFFSET(selected);
     // Update selected block
     seek_os(fd, selected, SEEK_SET);
     if (write_os(fd, &marker, sizeof(PALLOC_SIZE)) != sizeof(PALLOC_SIZE)) {
@@ -413,8 +420,8 @@ PALLOC_OFFSET palloc(PALLOC_FD fd, PALLOC_SIZE size) {
       return 0;
     }
     // Initialize new free block
-    marker = htobe64((selected_size - size - (sizeof(PALLOC_SIZE)*2)) | PALLOC_MARKER_FREE);
-    free_pprev = htobe64(seek_os(fd, 0, SEEK_CUR));
+    marker = PALLOC_HTOBE_SIZE((selected_size - size - (sizeof(PALLOC_SIZE)*2)) | PALLOC_MARKER_FREE);
+    free_pprev = PALLOC_HTOBE_OFFSET(seek_os(fd, 0, SEEK_CUR));
     if (write_os(fd, &marker, sizeof(PALLOC_SIZE)) != sizeof(PALLOC_SIZE)) {
       perror("palloc::write");
       return 0;
@@ -427,13 +434,13 @@ PALLOC_OFFSET palloc(PALLOC_FD fd, PALLOC_SIZE size) {
       perror("palloc::write");
       return 0;
     }
-    seek_os(fd, (be64toh(marker) & (~PALLOC_MARKER_FREE)) - (sizeof(PALLOC_OFFSET)*2), SEEK_CUR);
+    seek_os(fd, (PALLOC_BETOH_SIZE(marker) & (~PALLOC_MARKER_FREE)) - (sizeof(PALLOC_OFFSET)*2), SEEK_CUR);
     if (write_os(fd, &marker, sizeof(PALLOC_SIZE)) != sizeof(PALLOC_SIZE)) {
       perror("palloc::write");
       return 0;
     }
     // Update next block's pointer
-    free_nnext = be64toh(free_nnext);
+    free_nnext = PALLOC_BETOH_OFFSET(free_nnext);
     if (free_nnext) {
       seek_os(fd, free_nnext + sizeof(PALLOC_SIZE), SEEK_SET);
       if (write_os(fd, &free_pprev, sizeof(PALLOC_OFFSET)) != sizeof(PALLOC_OFFSET)) {
@@ -450,19 +457,19 @@ PALLOC_OFFSET palloc(PALLOC_FD fd, PALLOC_SIZE size) {
   seek_os(fd, selected + sizeof(PALLOC_SIZE), SEEK_SET);
   read_os(fd, &free_prev, sizeof(PALLOC_OFFSET));
   read_os(fd, &free_next, sizeof(PALLOC_OFFSET));
-  free_prev = be64toh(free_prev);
-  free_next = be64toh(free_next);
+  free_prev = PALLOC_BETOH_OFFSET(free_prev);
+  free_next = PALLOC_BETOH_OFFSET(free_next);
   if (free_prev) {
-    free_next = htobe64(free_next);
+    free_next = PALLOC_HTOBE_OFFSET(free_next);
     seek_os(fd, free_prev + sizeof(PALLOC_SIZE) + sizeof(PALLOC_OFFSET), SEEK_SET);
     write_os(fd, &free_next, sizeof(PALLOC_OFFSET));
-    free_next = be64toh(free_next);
+    free_next = PALLOC_BETOH_OFFSET(free_next);
   }
   if (free_next) {
-    free_prev = htobe64(free_prev);
+    free_prev = PALLOC_HTOBE_OFFSET(free_prev);
     seek_os(fd, free_next + sizeof(PALLOC_SIZE), SEEK_SET);
     write_os(fd, &free_prev, sizeof(PALLOC_OFFSET));
-    free_prev = be64toh(free_prev);
+    free_prev = PALLOC_BETOH_OFFSET(free_prev);
   }
 
   // Fix first free
@@ -471,7 +478,7 @@ PALLOC_OFFSET palloc(PALLOC_FD fd, PALLOC_SIZE size) {
   }
 
   // Mark selected block as non-free
-  marker = htobe64(size);
+  marker = PALLOC_HTOBE_SIZE(size);
   seek_os(fd, selected, SEEK_SET);
   if (write_os(fd, &marker, sizeof(PALLOC_SIZE)) != sizeof(PALLOC_SIZE)) {
     perror("palloc::write");
@@ -679,7 +686,7 @@ void _pfree_merge(PALLOC_FD fd, PALLOC_OFFSET left, PALLOC_OFFSET right) {
 
   // Actually merge the blocks into 1 big one
   left_size   = left_size + right_size + (sizeof(PALLOC_SIZE)*2);
-  left_marker = htobe64(left_size | PALLOC_MARKER_FREE);
+  left_marker = PALLOC_HTOBE_SIZE(left_size | PALLOC_MARKER_FREE);
   seek_os(fd, left, SEEK_SET);
   write_os(fd, &left_marker, sizeof(left_marker));
   seek_os(fd, sizeof(PALLOC_OFFSET), SEEK_CUR);
@@ -688,11 +695,11 @@ void _pfree_merge(PALLOC_FD fd, PALLOC_OFFSET left, PALLOC_OFFSET right) {
   write_os(fd, &left_marker, sizeof(left_marker));
 
   // Update right_next's prev pointer
-  if (be64toh(right_next)) {
-    left = htobe64(left);
-    seek_os(fd, be64toh(right_next) + sizeof(PALLOC_SIZE), SEEK_SET);
+  if (PALLOC_BETOH_OFFSET(right_next)) {
+    left = PALLOC_HTOBE_OFFSET(left);
+    seek_os(fd, PALLOC_BETOH_OFFSET(right_next) + sizeof(PALLOC_SIZE), SEEK_SET);
     write_os(fd, &left, sizeof(left));
-    left = be64toh(left);
+    left = PALLOC_BETOH_OFFSET(left);
   }
 }
 
@@ -715,18 +722,18 @@ PALLOC_RESPONSE pfree(PALLOC_FD fd, PALLOC_OFFSET ptr) {
     if (free_cur > ptr) { free_next = free_cur; break; }
     seek_os(fd, free_cur + sizeof(PALLOC_SIZE) + sizeof(PALLOC_OFFSET), SEEK_SET);
     read_os(fd, &free_cur, sizeof(PALLOC_OFFSET));
-    free_cur = be64toh(free_cur);
+    free_cur = PALLOC_BETOH_OFFSET(free_cur);
   }
 
   // We need BE pointers during the next block
-  free_prev = htobe64(free_prev);
-  free_next = htobe64(free_next);
+  free_prev = PALLOC_HTOBE_OFFSET(free_prev);
+  free_next = PALLOC_HTOBE_OFFSET(free_next);
 
   // Mark ourselves as free & link into free list
   seek_os(fd, ptr, SEEK_SET);
   read_os(fd, &marker, sizeof(PALLOC_SIZE));
-  size   = be64toh(marker) & (~PALLOC_MARKER_FREE);
-  marker = htobe64(size | PALLOC_MARKER_FREE);
+  size   = PALLOC_BETOH_SIZE(marker) & (~PALLOC_MARKER_FREE);
+  marker = PALLOC_HTOBE_SIZE(size | PALLOC_MARKER_FREE);
   seek_os(fd, ptr, SEEK_SET);
   write_os(fd, &marker, sizeof(marker));
   write_os(fd, &free_prev, sizeof(free_prev));
@@ -740,18 +747,18 @@ PALLOC_RESPONSE pfree(PALLOC_FD fd, PALLOC_OFFSET ptr) {
   }
 
   // We need H pointers during the next block
-  free_prev = be64toh(free_prev);
-  free_next = be64toh(free_next);
+  free_prev = PALLOC_BETOH_OFFSET(free_prev);
+  free_next = PALLOC_BETOH_OFFSET(free_next);
 
   // Update our neighbours' pointers
   if (free_prev) {
     seek_os(fd, free_prev + sizeof(PALLOC_SIZE) + sizeof(PALLOC_OFFSET), SEEK_SET);
-    off_left = htobe64(ptr);
+    off_left = PALLOC_HTOBE_OFFSET(ptr);
     write_os(fd, &off_left, sizeof(PALLOC_SIZE));
   }
   if (free_next) {
     seek_os(fd, free_next + sizeof(PALLOC_SIZE), SEEK_SET);
-    off_right = htobe64(ptr);
+    off_right = PALLOC_HTOBE_OFFSET(ptr);
     write_os(fd, &off_right, sizeof(PALLOC_SIZE));
   }
 
@@ -780,7 +787,7 @@ PALLOC_OFFSET palloc_next(PALLOC_FD fd, PALLOC_OFFSET ptr) {
     ptr = finfo->header_size;
     seek_os(fd, ptr, SEEK_SET);
     if (read_os(fd, &marker, sizeof(marker)) != sizeof(marker)) return 0;
-    marker = be64toh(marker);
+    marker = PALLOC_BETOH_SIZE(marker);
     if (!(marker & PALLOC_MARKER_FREE)) return ptr + sizeof(marker);
 
   // Convert pointer to internal usage
@@ -791,7 +798,7 @@ PALLOC_OFFSET palloc_next(PALLOC_FD fd, PALLOC_OFFSET ptr) {
   // Read the marker of the given block
   seek_os(fd, ptr, SEEK_SET);
   if (read_os(fd, &marker, sizeof(marker)) != sizeof(marker)) return 0;
-  marker = be64toh(marker);
+  marker = PALLOC_BETOH_SIZE(marker);
 
   // Skip the first one
   ptr = ptr + (sizeof(PALLOC_SIZE) * 2) + (marker & (~PALLOC_MARKER_FREE));
@@ -799,7 +806,7 @@ PALLOC_OFFSET palloc_next(PALLOC_FD fd, PALLOC_OFFSET ptr) {
     if (ptr >= finfo->medium_size) return 0;
     seek_os(fd, ptr, SEEK_SET);
     if (read_os(fd, &marker, sizeof(marker)) != sizeof(marker)) return 0;
-    marker = be64toh(marker);
+    marker = PALLOC_BETOH_SIZE(marker);
     if (!(marker & PALLOC_MARKER_FREE)) return ptr + sizeof(marker);
     ptr += (sizeof(marker)*2) + (marker & (~PALLOC_MARKER_FREE));
   }
