@@ -544,6 +544,15 @@ PALLOC_RESPONSE pfree(PALLOC_FD fd, PALLOC_OFFSET ptr) {
   // Fetch info
   struct palloc_fd_info *finfo = _palloc_info(fd);
 
+  // Get the pointer's own marker in advance
+  // Bail early if already free
+  seek_os(fd, ptr, SEEK_SET);
+  read_os(fd, &marker, sizeof(PALLOC_SIZE));
+  marker = PALLOC_BETOH_SIZE(marker);
+  if (marker & PALLOC_MARKER_FREE) {
+    return PALLOC_OK;
+  }
+
   // Detect free neighbours
   PALLOC_OFFSET free_prev = 0;
   PALLOC_OFFSET free_next = 0;
