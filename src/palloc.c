@@ -134,6 +134,12 @@ struct palloc_fd_info * _palloc_info(PALLOC_FD fd) {
     // Get the current medium size
     finfo->medium_size = seek_os(fd, 0, SEEK_END);
 
+    // Pre-bail on new file
+    // All zeroes is accurate here
+    if (!finfo->medium_size) {
+      return finfo;
+    }
+
     // Detect header size
     finfo->header_size = expected_header_size + sizeof(PALLOC_FLAGS);
     char *hdr       = malloc(expected_header_size);
@@ -160,7 +166,7 @@ struct palloc_fd_info * _palloc_info(PALLOC_FD fd) {
       }
       pos = seek_os(fd, marker + sizeof(marker), SEEK_CUR);
     }
-    if (pos == finfo->medium_size) {
+    if (pos >= finfo->medium_size) {
       finfo->first_free = 0;
     } else {
       finfo->first_free = pos;
@@ -239,21 +245,15 @@ PALLOC_RESPONSE palloc_init(PALLOC_FD fd, PALLOC_FLAGS flags) {
   const int min_medium_size = min_header_size + (sizeof(PALLOC_SIZE)*2) + (sizeof(PALLOC_OFFSET)*2);
   char *z = calloc(min_medium_size, 1);
 
-  // Fetch the file's size
-  struct stat_os fst;
-  if (fstat_os(fd, &fst)) {
-    perror("palloc_init::fstat");
-    free(z);
-    return PALLOC_ERR;
-  }
-  int size = fst.st_size;
+  // Pre-fetch medium info
+  struct palloc_fd_info *finfo = _palloc_info(fd);
 
   // Make sure the medium has room for the header
-  if (size < min_header_size) {
+  if (finfo->medium_size < min_header_size) {
     if (flags & PALLOC_DYNAMIC) {
       seek_os(fd, 0, SEEK_SET);
       write_os(fd, z, min_header_size);
-      size = min_header_size;
+      finfo->medium_size = min_header_size;
       seek_os(fd, 0, SEEK_SET);
     } else {
       fprintf(stderr, "Incompatible medium\n");
@@ -263,11 +263,11 @@ PALLOC_RESPONSE palloc_init(PALLOC_FD fd, PALLOC_FLAGS flags) {
   }
 
   // Fix broken size
-  if ((size > min_header_size) && (size < min_medium_size)) {
+  if ((finfo->medium_size > min_header_size) && (finfo->medium_size < min_medium_size)) {
     if (flags & PALLOC_DYNAMIC) {
       seek_os(fd, min_header_size, SEEK_SET);
       write_os(fd, z, min_medium_size - min_header_size);
-      size = min_medium_size;
+      finfo->medium_size = min_medium_size;
       seek_os(fd, 0, SEEK_SET);
     } else {
       fprintf(stderr, "Incompatible medium\n");
@@ -305,11 +305,17 @@ PALLOC_RESPONSE palloc_init(PALLOC_FD fd, PALLOC_FLAGS flags) {
     return PALLOC_ERR;
   }
 
+  // Keep track of header size
+  if (min_header_size > finfo->header_size) {
+    finfo->header_size = min_header_size;
+  }
+
   // Mark remainder of medium free
-  if (size >= min_medium_size) {
-    PALLOC_SIZE   marker = PALLOC_HTOBE_SIZE((PALLOC_SIZE)((size - min_header_size - (sizeof(PALLOC_SIZE)*2)) | PALLOC_MARKER_FREE));
+  if (finfo->medium_size >= min_medium_size) {
+    PALLOC_SIZE   marker = PALLOC_HTOBE_SIZE((PALLOC_SIZE)((finfo->medium_size - min_header_size - (sizeof(PALLOC_SIZE)*2)) | PALLOC_MARKER_FREE));
     PALLOC_OFFSET ptr    = PALLOC_HTOBE_OFFSET((PALLOC_OFFSET)0);
-    seek_os(fd, min_header_size, SEEK_SET);
+    seek_os(fd, finfo->header_size, SEEK_SET);
+    finfo->first_free = finfo->header_size;
     if (write_os(fd, &marker, sizeof(PALLOC_SIZE)) != sizeof(PALLOC_SIZE)) {
       perror("palloc_init::write_marker_start");
       free(z);
