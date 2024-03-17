@@ -294,7 +294,8 @@ PALLOC_RESPONSE palloc_init(PALLOC_FD fd, PALLOC_FLAGS flags) {
   }
 
   // Build & write new header
-  PALLOC_FLAGS nflags = PALLOC_HTOBE_FLAGS(flags & (~PALLOC_SYNC));
+  finfo->flags        = flags;
+  PALLOC_FLAGS nflags = PALLOC_HTOBE_FLAGS(finfo->flags & (~PALLOC_SYNC));
   memcpy(hdr, expected_header, expected_header_size);
   memcpy(hdr + expected_header_size, &nflags, sizeof(PALLOC_FLAGS));
   seek_os(fd, 0, SEEK_SET);
