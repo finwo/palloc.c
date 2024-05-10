@@ -12,6 +12,7 @@ Example
 ```C
 // Pre-open the file descriptor palloc will be operating on
 int fd = palloc_open("path/to/file.db", PALLOC_DEFAULT | PALLOC_DYNAMIC);
+palloc_init(fd, PALLOC_DEFAULT);
 
 // Fetch the first allocated blob
 PALLOC_OFFSET first = palloc_next(fd, 0);
