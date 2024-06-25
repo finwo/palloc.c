@@ -6,6 +6,10 @@
 /// Allows your program to allocate and iterate over persistently allocated blobs
 /// of data within a file or other file-like medium.
 ///
+/// This library is designed to be simple (to use), not to break any speed
+/// records. While performance improvements are welcome, keep simplicity in mind
+/// when making contributions.
+///
 /// Example
 /// -------
 ///
@@ -265,7 +269,7 @@ PALLOC_OFFSET palloc_next(PALLOC_FD fd, PALLOC_OFFSET ptr);
 /// - header
 ///     - 4B header "PBA\0"
 ///     - uint16_t  flags
-/// - blobs */
+/// - blobs
 ///     - 8B free + size
 /// - size indicator: data only, excludes size indicator itself
 /// - free flag:
