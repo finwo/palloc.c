@@ -15,17 +15,6 @@ extern "C" {
 #include <sys/stat.h>
 
 #include "finwo/endian.h"
-
-#if defined(_WIN32) || defined(_WIN64)
-// Needs to be AFTER winsock2 which is used for endian.h
-#include <windows.h>
-#include <io.h>
-#include <BaseTsd.h>
-#else
-#include <sys/types.h>
-#include <unistd.h>
-#endif
-
 #include "finwo/canonical-path.h"
 #include "finwo/io.h"
 
@@ -585,10 +574,30 @@ PALLOC_RESPONSE pfree(PALLOC_FD fd, PALLOC_OFFSET ptr) {
 
   // Merge with neighbours if consecutive
   // Next first, so we don't need to update our tracking
-  if (free_next) _pfree_merge(fd, ptr, free_next);
-  if (free_prev) _pfree_merge(fd, free_prev, ptr);
+  if (free_next) { _pfree_merge(fd, ptr, free_next); }
+  if (free_prev) { _pfree_merge(fd, free_prev, ptr); ptr = free_prev; }
 
-  // TODO: if dynamic and we're last in the file, truncate
+  // Truncate if last in file
+  if (finfo->flags & PALLOC_DYNAMIC) {
+    size = _palloc_size(fd, ptr);
+    if (ptr + size + (sizeof(PALLOC_SIZE)*2) >= finfo->medium_size) {
+
+      // Remove free_prev's next pointer
+      seek_os(fd, ptr + sizeof(PALLOC_SIZE), SEEK_SET);
+      read_os(fd, &free_prev, sizeof(free_prev));
+      free_prev = PALLOC_BETOH_OFFSET(free_prev);
+      if (free_prev) {
+        free_next = PALLOC_HTOBE_OFFSET(0);
+        seek_os(fd, free_prev + sizeof(PALLOC_SIZE) + sizeof(PALLOC_OFFSET), SEEK_SET);
+        write_os(fd, &free_next, sizeof(free_next));
+      }
+
+      // Truncate the file
+      truncate_os(fd, ptr);
+      finfo->medium_size = ptr;
+    }
+  }
+
   return PALLOC_OK;
 }
 
