@@ -30,6 +30,18 @@ extern "C" {
 #define OPENMODE  (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP)
 #endif
 
+void test_open() {
+  char *testfile = "pizza.db";
+  int fd;
+
+  fd = palloc_open(testfile, PALLOC_DEFAULT | PALLOC_DYNAMIC);
+  ASSERT("palloc_open(pizza.db, dynamic) returns a file descriptor", fd > 0);
+  palloc_close(fd);
+
+  fd = palloc_open(NULL, PALLOC_DEFAULT | PALLOC_DYNAMIC);
+  ASSERT("palloc_open(NULL, dynamic) returns no file descriptor", fd == 0);
+}
+
 void test_init() {
   char *testfile = "pizza.db";
   char *z = calloc(1024*1024, sizeof(char));
@@ -162,6 +174,7 @@ void test_init() {
 }
 
 int main() {
+  RUN(test_open);
   RUN(test_init);
   return TEST_REPORT();
 }
